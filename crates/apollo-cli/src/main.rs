@@ -45,7 +45,7 @@ enum Commands {
     },
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
@@ -53,26 +53,24 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Init { path } => {
-            println!("Initializing library at {:?}", path);
+            println!("Initializing library at {path:?}");
             // TODO: Implement
         }
         Commands::Import { path } => {
-            println!("Importing from {}", path);
+            println!("Importing from {path}");
             // TODO: Implement
         }
         Commands::List { type_ } => {
-            println!("Listing {}", type_);
+            println!("Listing {type_}");
             // TODO: Implement
         }
         Commands::Query { query } => {
-            println!("Searching for: {}", query);
+            println!("Searching for: {query}");
             // TODO: Implement
         }
         Commands::Web { host, port } => {
-            println!("Starting web server at {}:{}", host, port);
+            println!("Starting web server at {host}:{port}");
             // TODO: Implement
         }
     }
-
-    Ok(())
 }

@@ -3,18 +3,18 @@
 ## Current Sprint: Foundation
 
 ### Priority 1: Project Setup
-- [TODO] Initialize Cargo workspace with all crates
+- [DONE] Initialize Cargo workspace with all crates (2025-11-28)
 - [TODO] Set up CI/CD with GitHub Actions
 - [TODO] Configure code coverage reporting
 - [TODO] Set up pre-commit hooks
 
 ### Priority 2: Core Types
-- [TODO] Define Track metadata struct
-- [TODO] Define Album metadata struct  
-- [TODO] Define Artist metadata struct
-- [TODO] Implement Display traits
-- [TODO] Implement Serialize/Deserialize
-- [TODO] Write property-based tests for types
+- [DONE] Define Track metadata struct (2025-11-28)
+- [DONE] Define Album metadata struct (2025-11-28)
+- [DONE] Define Artist metadata struct (2025-11-28)
+- [DONE] Implement Display traits (2025-11-28)
+- [DONE] Implement Serialize/Deserialize (2025-11-28)
+- [IN PROGRESS] Write property-based tests for types
 
 ### Priority 3: Database Layer
 - [TODO] Design SQLite schema
@@ -40,7 +40,7 @@
 - [TODO] Caching responses
 
 ### Priority 6: CLI Foundation
-- [TODO] Basic CLI structure with clap
+- [DONE] Basic CLI structure with clap (2025-11-28)
 - [TODO] `init` command (create library)
 - [TODO] `import` command (scan directory)
 - [TODO] `list` command (show library)
@@ -80,7 +80,11 @@
 
 ## Completed
 
-(Move completed tasks here with date)
+- [2025-11-28] Initialize Cargo workspace with all crates
+- [2025-11-28] Define Track/Album/Artist metadata structs
+- [2025-11-28] Implement Display traits for core types
+- [2025-11-28] Implement Serialize/Deserialize for core types
+- [2025-11-28] Basic CLI structure with clap
 
 ---
 

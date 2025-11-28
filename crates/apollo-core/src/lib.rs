@@ -5,10 +5,10 @@
 //! This crate contains no I/O operations and is designed to be purely functional
 //! where possible.
 
-pub mod metadata;
-pub mod library;
-pub mod query;
 pub mod error;
+pub mod library;
+pub mod metadata;
+pub mod query;
 
 pub use error::Error;
-pub use metadata::{Track, Album, Artist, AudioFormat};
+pub use metadata::{Album, Artist, AudioFormat, Track};

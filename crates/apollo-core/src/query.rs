@@ -56,7 +56,7 @@ impl Query {
     /// Returns an error if the query syntax is invalid.
     pub fn parse(input: &str) -> Result<Self> {
         let input = input.trim();
-        
+
         if input.is_empty() {
             return Ok(Self::All);
         }
@@ -73,20 +73,21 @@ impl Query {
                 "path" => Field::Path,
                 _ => return Err(Error::InvalidQuery(format!("unknown field: {field}"))),
             };
-            
+
             // Check for year range
-            if field == Field::Year && value.contains("..") {
-                if let Some((start, end)) = value.split_once("..") {
-                    let start: i32 = start.parse().map_err(|_| {
-                        Error::InvalidQuery(format!("invalid year: {start}"))
-                    })?;
-                    let end: i32 = end.parse().map_err(|_| {
-                        Error::InvalidQuery(format!("invalid year: {end}"))
-                    })?;
-                    return Ok(Self::YearRange { start, end });
-                }
+            if field == Field::Year
+                && value.contains("..")
+                && let Some((start, end)) = value.split_once("..")
+            {
+                let start: i32 = start
+                    .parse()
+                    .map_err(|_| Error::InvalidQuery(format!("invalid year: {start}")))?;
+                let end: i32 = end
+                    .parse()
+                    .map_err(|_| Error::InvalidQuery(format!("invalid year: {end}")))?;
+                return Ok(Self::YearRange { start, end });
             }
-            
+
             Ok(Self::Field {
                 field,
                 value: value.to_string(),
@@ -128,7 +129,10 @@ mod tests {
         let query = Query::parse("year:2020..2023").unwrap();
         assert!(matches!(
             query,
-            Query::YearRange { start: 2020, end: 2023 }
+            Query::YearRange {
+                start: 2020,
+                end: 2023
+            }
         ));
     }
 }

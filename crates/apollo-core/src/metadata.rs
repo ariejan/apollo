@@ -123,9 +123,9 @@ pub struct Track {
     pub channels: Option<u8>,
     /// Audio format.
     pub format: AudioFormat,
-    /// MusicBrainz recording ID.
+    /// [MusicBrainz](https://musicbrainz.org/) recording ID.
     pub musicbrainz_id: Option<String>,
-    /// AcoustID fingerprint identifier.
+    /// [AcoustID](https://acoustid.org/) fingerprint identifier.
     pub acoustid: Option<String>,
     /// When the track was added to the library.
     pub added_at: DateTime<Utc>,
@@ -185,7 +185,7 @@ pub struct Album {
     pub track_count: u32,
     /// Number of discs.
     pub disc_count: u32,
-    /// MusicBrainz release ID.
+    /// [MusicBrainz](https://musicbrainz.org/) release ID.
     pub musicbrainz_id: Option<String>,
     /// When the album was added to the library.
     pub added_at: DateTime<Utc>,
@@ -220,14 +220,14 @@ pub struct Artist {
     pub name: String,
     /// Sort name (e.g., "Beatles, The").
     pub sort_name: Option<String>,
-    /// MusicBrainz artist ID.
+    /// [MusicBrainz](https://musicbrainz.org/) artist ID.
     pub musicbrainz_id: Option<String>,
 }
 
 impl Artist {
     /// Create a new artist.
     #[must_use]
-    pub fn new(name: String) -> Self {
+    pub const fn new(name: String) -> Self {
         Self {
             name,
             sort_name: None,
@@ -269,7 +269,7 @@ mod tests {
             "Test Artist".to_string(),
             Duration::from_secs(180),
         );
-        
+
         assert_eq!(track.title, "Test Song");
         assert_eq!(track.artist, "Test Artist");
         assert_eq!(track.duration, Duration::from_secs(180));
@@ -283,10 +283,10 @@ mod tests {
             "Test Artist".to_string(),
             Duration::from_secs(180),
         );
-        
+
         let json = serde_json::to_string(&track).unwrap();
         let deserialized: Track = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(track.title, deserialized.title);
         assert_eq!(track.artist, deserialized.artist);
         assert_eq!(track.duration, deserialized.duration);
