@@ -6,6 +6,7 @@ This file contains specific instructions for Claude Code when working on this pr
 
 ```bash
 # Start of session
+git pull
 git status && git log --oneline -5
 cat DECISIONS_NEEDED.md
 cat TASKS.md
@@ -23,7 +24,7 @@ git push origin HEAD
 
 ## Commit Frequency
 
-**IMPORTANT**: Commit and push at least every 30 minutes, or after completing any logical unit of work.
+**IMPORTANT**: Commit and push at least every 15 minutes, or after completing any logical unit of work.
 
 Rationale: This ensures progress is saved and visible, allows the human operator to monitor progress, and prevents loss of work if the session is interrupted.
 
