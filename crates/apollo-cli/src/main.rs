@@ -7,7 +7,9 @@
 
 use anyhow::{Context, Result};
 use apollo_audio::{OrganizeOptions, ScanOptions, ScanProgress, organize_file, scan_directory};
-use apollo_core::{Config, PathTemplate};
+use apollo_core::playlist::{Playlist, PlaylistId, PlaylistSort};
+use apollo_core::query::Query;
+use apollo_core::{Config, PathTemplate, TrackId};
 use apollo_db::SqliteLibrary;
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -134,6 +136,11 @@ enum Commands {
         #[arg(short, long)]
         limit: Option<u32>,
     },
+    /// Manage playlists
+    Playlist {
+        #[command(subcommand)]
+        action: PlaylistAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -176,6 +183,101 @@ enum DuplicateType {
     Similar,
     /// Both exact and similar duplicates
     All,
+}
+
+#[derive(Subcommand)]
+enum PlaylistAction {
+    /// Create a new playlist
+    Create {
+        /// Playlist name
+        name: String,
+
+        /// Description
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Create a smart playlist with a query
+        #[arg(short, long)]
+        query: Option<String>,
+
+        /// Sort order for smart playlists
+        #[arg(short, long, value_enum, default_value = "artist")]
+        sort: PlaylistSortArg,
+
+        /// Maximum number of tracks (for smart playlists)
+        #[arg(short, long)]
+        max_tracks: Option<u32>,
+    },
+    /// List all playlists
+    List,
+    /// Show a playlist's details and tracks
+    Show {
+        /// Playlist ID or name
+        playlist: String,
+    },
+    /// Add a track to a static playlist
+    AddTrack {
+        /// Playlist ID or name
+        playlist: String,
+
+        /// Track ID(s) to add
+        #[arg(required = true)]
+        track_ids: Vec<String>,
+    },
+    /// Remove a track from a static playlist
+    RemoveTrack {
+        /// Playlist ID or name
+        playlist: String,
+
+        /// Track ID(s) to remove
+        #[arg(required = true)]
+        track_ids: Vec<String>,
+    },
+    /// Delete a playlist
+    Delete {
+        /// Playlist ID or name
+        playlist: String,
+
+        /// Skip confirmation
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum, Default)]
+enum PlaylistSortArg {
+    /// Sort by artist name, then album, then track number
+    #[default]
+    Artist,
+    /// Sort by album name, then track number
+    Album,
+    /// Sort by track title
+    Title,
+    /// Sort by date added (newest first)
+    AddedDesc,
+    /// Sort by date added (oldest first)
+    AddedAsc,
+    /// Sort by year (newest first)
+    YearDesc,
+    /// Sort by year (oldest first)
+    YearAsc,
+    /// Random order
+    Random,
+}
+
+impl From<PlaylistSortArg> for PlaylistSort {
+    fn from(arg: PlaylistSortArg) -> Self {
+        match arg {
+            PlaylistSortArg::Artist => Self::Artist,
+            PlaylistSortArg::Album => Self::Album,
+            PlaylistSortArg::Title => Self::Title,
+            PlaylistSortArg::AddedDesc => Self::AddedDesc,
+            PlaylistSortArg::AddedAsc => Self::AddedAsc,
+            PlaylistSortArg::YearDesc => Self::YearDesc,
+            PlaylistSortArg::YearAsc => Self::YearAsc,
+            PlaylistSortArg::Random => Self::Random,
+        }
+    }
 }
 
 /// Load configuration from file or use defaults.
@@ -289,6 +391,10 @@ async fn main() -> Result<()> {
                 limit,
             )
             .await
+        }
+        Commands::Playlist { action } => {
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
+            cmd_playlist(&lib_path, action).await
         }
     }
 }
@@ -1081,4 +1187,286 @@ fn parse_bool(value: &str) -> Result<bool> {
         "false" | "0" | "no" | "off" => Ok(false),
         _ => anyhow::bail!("Invalid boolean value: {value} (use true/false)"),
     }
+}
+
+/// Handle playlist commands.
+#[allow(clippy::too_many_lines)]
+async fn cmd_playlist(lib_path: &Path, action: PlaylistAction) -> Result<()> {
+    // Check if library exists
+    if !lib_path.exists() {
+        eprintln!("Library not found at: {}", lib_path.display());
+        eprintln!("Run 'apollo init' first to create a library");
+        std::process::exit(1);
+    }
+
+    // Connect to database
+    let db_url = format!("sqlite:{}", lib_path.display());
+    let db = SqliteLibrary::new(&db_url)
+        .await
+        .context("Failed to open library database")?;
+
+    match action {
+        PlaylistAction::Create {
+            name,
+            description,
+            query,
+            sort,
+            max_tracks,
+        } => {
+            let playlist = if let Some(query_str) = query {
+                // Parse the query
+                let parsed_query = Query::parse(&query_str)
+                    .with_context(|| format!("Invalid query: {query_str}"))?;
+
+                let mut pl = Playlist::new_smart(&name, parsed_query).with_sort(sort.into());
+
+                if let Some(max) = max_tracks {
+                    pl = pl.with_max_tracks(max);
+                }
+
+                if let Some(desc) = description {
+                    pl = pl.with_description(desc);
+                }
+
+                pl
+            } else {
+                let mut pl = Playlist::new_static(&name);
+
+                if let Some(desc) = description {
+                    pl = pl.with_description(desc);
+                }
+
+                pl
+            };
+
+            let kind = if playlist.is_smart() {
+                "smart"
+            } else {
+                "static"
+            };
+            db.add_playlist(&playlist).await?;
+
+            println!("Created {kind} playlist: {name}");
+            println!("ID: {}", playlist.id);
+
+            if playlist.is_smart() {
+                if let Some(ref q) = playlist.query {
+                    println!("Query: {q}");
+                }
+                println!("Sort: {}", playlist.sort);
+                if let Some(ref limit) = playlist.limit
+                    && let Some(max) = limit.max_tracks
+                {
+                    println!("Max tracks: {max}");
+                }
+            }
+
+            Ok(())
+        }
+        PlaylistAction::List => {
+            let playlists = db.list_playlists().await?;
+
+            if playlists.is_empty() {
+                println!("No playlists in library");
+                return Ok(());
+            }
+
+            println!("Playlists ({} total):", playlists.len());
+            println!();
+
+            for playlist in playlists {
+                let kind = if playlist.is_smart() {
+                    "smart"
+                } else {
+                    "static"
+                };
+                let track_count = if playlist.is_static() {
+                    playlist.track_ids.len()
+                } else {
+                    // For smart playlists, we'd need to evaluate the query
+                    // Just show "?" for now to avoid expensive queries
+                    0
+                };
+
+                let desc = playlist
+                    .description
+                    .as_ref()
+                    .map(|d| format!(" - {d}"))
+                    .unwrap_or_default();
+
+                if playlist.is_smart() {
+                    let query_str = playlist
+                        .query
+                        .as_ref()
+                        .map(|q| format!(" [{q}]"))
+                        .unwrap_or_default();
+                    println!("  {} ({kind}){query_str}{desc}", playlist.name);
+                } else {
+                    println!("  {} ({kind}, {track_count} tracks){desc}", playlist.name);
+                }
+                println!("    ID: {}", playlist.id);
+            }
+
+            Ok(())
+        }
+        PlaylistAction::Show {
+            playlist: name_or_id,
+        } => {
+            let playlist = find_playlist(&db, &name_or_id).await?;
+
+            println!("Playlist: {}", playlist.name);
+            println!("ID: {}", playlist.id);
+            println!(
+                "Type: {}",
+                if playlist.is_smart() {
+                    "smart"
+                } else {
+                    "static"
+                }
+            );
+
+            if let Some(ref desc) = playlist.description {
+                println!("Description: {desc}");
+            }
+
+            if playlist.is_smart() {
+                if let Some(ref q) = playlist.query {
+                    println!("Query: {q}");
+                }
+                println!("Sort: {}", playlist.sort);
+                if let Some(ref limit) = playlist.limit
+                    && let Some(max) = limit.max_tracks
+                {
+                    println!("Max tracks: {max}");
+                }
+            }
+
+            println!();
+            println!("Tracks:");
+
+            let tracks = db.get_playlist_tracks(&playlist.id).await?;
+
+            if tracks.is_empty() {
+                println!("  (no tracks)");
+            } else {
+                for (i, track) in tracks.iter().enumerate() {
+                    let duration = format_duration(track.duration);
+                    let album = track.album_title.as_deref().unwrap_or("-");
+                    println!(
+                        "  {:3}. {} - {} [{album}] ({duration})",
+                        i + 1,
+                        track.artist,
+                        track.title
+                    );
+                }
+                println!();
+                println!("Total: {} tracks", tracks.len());
+            }
+
+            Ok(())
+        }
+        PlaylistAction::AddTrack {
+            playlist: name_or_id,
+            track_ids,
+        } => {
+            let playlist = find_playlist(&db, &name_or_id).await?;
+
+            if playlist.is_smart() {
+                anyhow::bail!("Cannot add tracks to a smart playlist");
+            }
+
+            let mut added = 0;
+            for id_str in &track_ids {
+                let uuid = uuid::Uuid::parse_str(id_str)
+                    .with_context(|| format!("Invalid track ID: {id_str}"))?;
+                let track_id = TrackId(uuid);
+
+                // Verify track exists
+                if db.get_track(&track_id).await?.is_none() {
+                    eprintln!("Warning: Track not found: {id_str}");
+                    continue;
+                }
+
+                db.add_track_to_playlist(&playlist.id, &track_id).await?;
+                added += 1;
+            }
+
+            println!("Added {added} track(s) to playlist '{}'", playlist.name);
+
+            Ok(())
+        }
+        PlaylistAction::RemoveTrack {
+            playlist: name_or_id,
+            track_ids,
+        } => {
+            let playlist = find_playlist(&db, &name_or_id).await?;
+
+            if playlist.is_smart() {
+                anyhow::bail!("Cannot remove tracks from a smart playlist");
+            }
+
+            let mut removed = 0;
+            for id_str in &track_ids {
+                let uuid = uuid::Uuid::parse_str(id_str)
+                    .with_context(|| format!("Invalid track ID: {id_str}"))?;
+                let track_id = TrackId(uuid);
+
+                db.remove_track_from_playlist(&playlist.id, &track_id)
+                    .await?;
+                removed += 1;
+            }
+
+            println!(
+                "Removed {removed} track(s) from playlist '{}'",
+                playlist.name
+            );
+
+            Ok(())
+        }
+        PlaylistAction::Delete {
+            playlist: name_or_id,
+            yes,
+        } => {
+            let playlist = find_playlist(&db, &name_or_id).await?;
+
+            if !yes {
+                println!(
+                    "Delete playlist '{}' ({})? [y/N] ",
+                    playlist.name, playlist.id
+                );
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    println!("Cancelled");
+                    return Ok(());
+                }
+            }
+
+            db.remove_playlist(&playlist.id).await?;
+            println!("Deleted playlist: {}", playlist.name);
+
+            Ok(())
+        }
+    }
+}
+
+/// Find a playlist by ID or name.
+async fn find_playlist(db: &SqliteLibrary, name_or_id: &str) -> Result<Playlist> {
+    // Try parsing as UUID first
+    if let Ok(uuid) = uuid::Uuid::parse_str(name_or_id) {
+        let id = PlaylistId(uuid);
+        if let Some(playlist) = db.get_playlist(&id).await? {
+            return Ok(playlist);
+        }
+    }
+
+    // Search by name
+    let playlists = db.list_playlists().await?;
+    for playlist in playlists {
+        if playlist.name.eq_ignore_ascii_case(name_or_id) {
+            return Ok(playlist);
+        }
+    }
+
+    anyhow::bail!("Playlist not found: {name_or_id}")
 }

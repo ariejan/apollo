@@ -15,6 +15,7 @@
 
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// A parsed query for searching the library.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +47,40 @@ pub enum Field {
     Year,
     Genre,
     Path,
+}
+
+impl fmt::Display for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::All => write!(f, "*"),
+            Self::Text(text) => write!(f, "{text}"),
+            Self::Field { field, value } => write!(f, "{field}:{value}"),
+            Self::YearRange { start, end } => write!(f, "year:{start}..{end}"),
+            Self::And(queries) => {
+                let parts: Vec<String> = queries.iter().map(|q| format!("({q})")).collect();
+                write!(f, "{}", parts.join(" AND "))
+            }
+            Self::Or(queries) => {
+                let parts: Vec<String> = queries.iter().map(|q| format!("({q})")).collect();
+                write!(f, "{}", parts.join(" OR "))
+            }
+            Self::Not(query) => write!(f, "NOT ({query})"),
+        }
+    }
+}
+
+impl fmt::Display for Field {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Artist => write!(f, "artist"),
+            Self::AlbumArtist => write!(f, "albumartist"),
+            Self::Album => write!(f, "album"),
+            Self::Title => write!(f, "title"),
+            Self::Year => write!(f, "year"),
+            Self::Genre => write!(f, "genre"),
+            Self::Path => write!(f, "path"),
+        }
+    }
 }
 
 impl Query {
