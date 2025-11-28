@@ -175,7 +175,7 @@ PROMPT_END
     
     # Use timeout and capture exit code
     local exit_code=0
-    timeout "$SESSION_TIMEOUT" claude "$prompt" 2>&1 | tee "$log_file" || exit_code=$?
+    timeout "$SESSION_TIMEOUT" claude --dangerously-skip-permissions "$prompt" 2>&1 | tee "$log_file" || exit_code=$?
     
     case $exit_code in
         0)
