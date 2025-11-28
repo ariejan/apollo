@@ -212,11 +212,11 @@ force_commit_and_push() {
 should_continue() {
     local session_num=$1
     
-    # Check max sessions limit
-    if [[ $MAX_SESSIONS -gt 0 && $session_num -ge $MAX_SESSIONS ]]; then
-        log_info "Reached maximum sessions ($MAX_SESSIONS)"
-        return 1
-    fi
+# Check max sessions limit
+# if [[ $MAX_SESSIONS -gt 0 && $session_num -ge $MAX_SESSIONS ]]; then
+#        log_info "Reached maximum sessions ($MAX_SESSIONS)"
+#        return 1
+#    fi
     
     # Check for stop file
     if [[ -f "$PROJECT_DIR/.claude-stop" ]]; then
