@@ -33,6 +33,52 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (continued)
+
+### Completed
+- Added property-based tests using proptest:
+  - Track, Album, Artist serialization roundtrips
+  - AudioFormat display validity
+  - TrackId/AlbumId uniqueness and UUID format
+  - Query parser field:value, year ranges, text queries
+  - Duration serialization with millisecond precision
+  - Total 22 tests in apollo-core (up from 6)
+
+- Implemented SQLite database layer (apollo-db):
+  - Designed schema with tracks, albums tables
+  - Added full-text search using FTS5 virtual tables
+  - Created triggers to keep FTS index in sync
+  - Implemented SqliteLibrary with full CRUD operations:
+    - get_track, add_track, update_track, remove_track
+    - get_album, add_album, update_album, remove_album
+    - get_album_tracks, search_tracks
+    - list_tracks, list_albums with pagination
+    - count_tracks, count_albums
+  - 5 integration tests for database operations
+  - Total 27 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Store genres as JSON arrays in SQLite (flexible, searchable)
+- Store timestamps as ISO8601 strings (portable, human-readable)
+- Use FTS5 for full-text search (built into SQLite, no external deps)
+- Allow clippy integer casts in schema.rs (documented as safe for music data)
+
+### Decisions Requested
+- None
+
+### Notes
+- Database layer is fully functional with in-memory and file-based storage
+- FTS search is working with automatic index sync
+- Next priorities: Audio file handling, then CLI implementation
+
+---
+
 ## Session: 2025-11-28 (initial)
 
 ### Completed

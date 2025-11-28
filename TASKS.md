@@ -17,12 +17,12 @@
 - [DONE] Write property-based tests for types (2025-11-28)
 
 ### Priority 3: Database Layer
-- [TODO] Design SQLite schema
-- [TODO] Set up sqlx migrations
-- [TODO] Implement CRUD for tracks
-- [TODO] Implement CRUD for albums
-- [TODO] Implement search queries
-- [TODO] Write integration tests
+- [DONE] Design SQLite schema (2025-11-28)
+- [DONE] Set up sqlx migrations (2025-11-28)
+- [DONE] Implement CRUD for tracks (2025-11-28)
+- [DONE] Implement CRUD for albums (2025-11-28)
+- [DONE] Implement search queries (2025-11-28)
+- [DONE] Write integration tests (2025-11-28)
 
 ### Priority 4: Audio File Handling
 - [TODO] Implement MP3 tag reading
@@ -86,6 +86,7 @@
 - [2025-11-28] Implement Serialize/Deserialize for core types
 - [2025-11-28] Basic CLI structure with clap
 - [2025-11-28] Write property-based tests for core types and query parser
+- [2025-11-28] Implement SQLite database layer with full CRUD and search
 
 ---
 
