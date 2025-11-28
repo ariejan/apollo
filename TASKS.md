@@ -47,10 +47,10 @@
 - [DONE] `query` command (search) (2025-11-28)
 
 ### Priority 7: Web API
-- [TODO] Axum server setup
-- [TODO] GET /api/tracks endpoint
-- [TODO] GET /api/albums endpoint
-- [TODO] Search endpoint
+- [DONE] Axum server setup (2025-11-28)
+- [DONE] GET /api/tracks endpoint (2025-11-28)
+- [DONE] GET /api/albums endpoint (2025-11-28)
+- [DONE] Search endpoint (2025-11-28)
 - [TODO] OpenAPI documentation
 
 ### Priority 8: Lua Integration
@@ -90,6 +90,7 @@
 - [2025-11-28] Implement audio file handling (MP3/FLAC/OGG reading, writing, scanning, hashing)
 - [2025-11-28] Implement CLI commands (init, import, list, query, stats)
 - [2025-11-28] Implement MusicBrainz API client with search and rate limiting
+- [2025-11-28] Implement Web API with Axum (tracks, albums, search, stats endpoints)
 
 ---
 

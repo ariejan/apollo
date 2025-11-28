@@ -33,6 +33,45 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Web API)
+
+### Completed
+- Implemented complete REST API in apollo-web crate:
+  - `GET /api/tracks` - List all tracks with pagination
+  - `GET /api/tracks/:id` - Get single track by ID
+  - `GET /api/albums` - List all albums with pagination
+  - `GET /api/albums/:id` - Get single album by ID
+  - `GET /api/albums/:id/tracks` - Get all tracks in an album
+  - `GET /api/search?q=` - Full-text search for tracks
+  - `GET /api/stats` - Library statistics (track/album counts)
+  - `GET /health` - Health check endpoint
+- Proper error handling with JSON error responses
+- CORS support for cross-origin requests
+- HTTP tracing middleware for request logging
+- 12 integration tests using axum-test
+- Total 53 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use `:id` path syntax for Axum 0.7 (not `{id}` which is for 0.8+)
+- Default pagination limit of 50, max 500
+- Simple FTS5 prefix matching for search (word* pattern)
+
+### Decisions Requested
+- None
+
+### Notes
+- OpenAPI documentation still TODO
+- Lua integration is next major feature
+- Web server can be started by creating `AppState` and calling `create_router()`
+
+---
+
 ## Session: 2025-11-28 (MusicBrainz integration)
 
 ### Completed
