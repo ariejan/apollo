@@ -1,8 +1,6 @@
 //! Cover art fetching client.
 
-use crate::coverart::types::{
-    CoverArtArchiveResponse, CoverImage, CoverType, ImageSize,
-};
+use crate::coverart::types::{CoverArtArchiveResponse, CoverImage, CoverType, ImageSize};
 use crate::error::{SourceError, SourceResult};
 use reqwest::Client;
 use reqwest::header::{ACCEPT, HeaderMap, HeaderValue, USER_AGENT};

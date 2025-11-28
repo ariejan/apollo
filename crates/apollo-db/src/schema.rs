@@ -442,6 +442,164 @@ impl SqliteLibrary {
 
         Ok(row.get::<i64, _>("count") as u64)
     }
+
+    /// Find tracks with duplicate file hashes (exact byte-for-byte duplicates).
+    ///
+    /// Returns groups of tracks that have the same file hash.
+    /// Each group contains 2 or more tracks that are exact duplicates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn find_exact_duplicates(&self) -> DbResult<Vec<Vec<Track>>> {
+        // First, find all file hashes that appear more than once
+        let hash_rows = sqlx::query(
+            r"SELECT file_hash, COUNT(*) as count
+              FROM tracks
+              WHERE file_hash != ''
+              GROUP BY file_hash
+              HAVING count > 1
+              ORDER BY count DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut duplicate_groups = Vec::new();
+
+        for hash_row in hash_rows {
+            let hash: String = hash_row.get("file_hash");
+
+            // Get all tracks with this hash
+            let track_rows = sqlx::query(
+                r"SELECT id, path, title, artist, album_artist, album_id, album_title,
+                         track_number, track_total, disc_number, disc_total, year,
+                         genres, duration_ms, bitrate, sample_rate, channels, format,
+                         musicbrainz_id, acoustid, added_at, modified_at, file_hash
+                  FROM tracks WHERE file_hash = ?
+                  ORDER BY added_at ASC",
+            )
+            .bind(&hash)
+            .fetch_all(&self.pool)
+            .await?;
+
+            let tracks: Vec<Track> = track_rows
+                .iter()
+                .map(row_to_track)
+                .collect::<DbResult<_>>()?;
+            duplicate_groups.push(tracks);
+        }
+
+        Ok(duplicate_groups)
+    }
+
+    /// Find tracks that are likely duplicates based on metadata similarity.
+    ///
+    /// Matches tracks with the same title, artist, and similar duration (within tolerance).
+    /// Returns groups of potentially duplicate tracks.
+    ///
+    /// # Arguments
+    ///
+    /// * `duration_tolerance_ms` - Maximum duration difference in milliseconds to consider similar
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn find_similar_duplicates(
+        &self,
+        duration_tolerance_ms: i64,
+    ) -> DbResult<Vec<Vec<Track>>> {
+        // Find tracks with matching title and artist
+        let rows = sqlx::query(
+            r"SELECT t1.id, t1.path, t1.title, t1.artist, t1.album_artist, t1.album_id, t1.album_title,
+                     t1.track_number, t1.track_total, t1.disc_number, t1.disc_total, t1.year,
+                     t1.genres, t1.duration_ms, t1.bitrate, t1.sample_rate, t1.channels, t1.format,
+                     t1.musicbrainz_id, t1.acoustid, t1.added_at, t1.modified_at, t1.file_hash
+              FROM tracks t1
+              JOIN tracks t2 ON t1.title = t2.title
+                            AND t1.artist = t2.artist
+                            AND t1.id != t2.id
+                            AND ABS(t1.duration_ms - t2.duration_ms) <= ?
+              GROUP BY t1.id
+              ORDER BY t1.artist, t1.title, t1.added_at",
+        )
+        .bind(duration_tolerance_ms)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Group tracks by title+artist
+        let mut groups: std::collections::HashMap<String, Vec<Track>> =
+            std::collections::HashMap::new();
+
+        for row in &rows {
+            let track = row_to_track(row)?;
+            let key = format!(
+                "{}||{}",
+                track.artist.to_lowercase(),
+                track.title.to_lowercase()
+            );
+            groups.entry(key).or_default().push(track);
+        }
+
+        // Only return groups with multiple tracks
+        Ok(groups.into_values().filter(|g| g.len() > 1).collect())
+    }
+
+    /// Check if a track with the given file hash already exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn track_exists_by_hash(&self, file_hash: &str) -> DbResult<bool> {
+        let row = sqlx::query("SELECT COUNT(*) as count FROM tracks WHERE file_hash = ?")
+            .bind(file_hash)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(row.get::<i64, _>("count") > 0)
+    }
+
+    /// Get a track by its file hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_track_by_hash(&self, file_hash: &str) -> DbResult<Option<Track>> {
+        let row = sqlx::query(
+            r"SELECT id, path, title, artist, album_artist, album_id, album_title,
+                     track_number, track_total, disc_number, disc_total, year,
+                     genres, duration_ms, bitrate, sample_rate, channels, format,
+                     musicbrainz_id, acoustid, added_at, modified_at, file_hash
+              FROM tracks WHERE file_hash = ?
+              LIMIT 1",
+        )
+        .bind(file_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|r| row_to_track(&r)).transpose()
+    }
+
+    /// Get a track by its file path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_track_by_path(&self, path: &std::path::Path) -> DbResult<Option<Track>> {
+        let path_str = path.to_string_lossy().to_string();
+
+        let row = sqlx::query(
+            r"SELECT id, path, title, artist, album_artist, album_id, album_title,
+                     track_number, track_total, disc_number, disc_total, year,
+                     genres, duration_ms, bitrate, sample_rate, channels, format,
+                     musicbrainz_id, acoustid, added_at, modified_at, file_hash
+              FROM tracks WHERE path = ?",
+        )
+        .bind(&path_str)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|r| row_to_track(&r)).transpose()
+    }
 }
 
 /// Convert a database row to a Track.

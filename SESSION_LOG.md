@@ -33,6 +33,44 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Duplicate Detection)
+
+### Completed
+- Added duplicate detection to apollo-db crate:
+  - `find_exact_duplicates()` - Find tracks with same file hash
+  - `find_similar_duplicates()` - Find tracks with matching title/artist/duration
+  - `track_exists_by_hash()` - Check if a track with hash exists
+  - `get_track_by_hash()` - Get a track by its file hash
+  - `get_track_by_path()` - Get a track by its file path
+- Added `apollo duplicates` CLI command:
+  - `--type exact` - Find exact byte-for-byte duplicates
+  - `--type similar` - Find tracks with similar metadata
+  - `--type all` - Find both types
+  - `--duration-tolerance` - Set tolerance for similar detection (seconds)
+  - `--paths` - Show file paths for duplicates
+- All tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use file hash (SHA-256) for exact duplicate detection
+- Use title/artist/duration for similar duplicate detection
+- Default duration tolerance of 3 seconds for similar detection
+- Group duplicates for display (first file is "original", rest are duplicates)
+
+### Decisions Requested
+- None
+
+### Notes
+- Duplicate detection works on existing library data only
+- Could add fingerprint-based duplicate detection using AcoustID in the future
+
+---
+
 ## Session: 2025-11-28 (Cover Art)
 
 ### Completed

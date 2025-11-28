@@ -91,6 +91,20 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Find duplicate tracks
+    Duplicates {
+        /// Detection type
+        #[arg(short = 't', long, value_enum, default_value = "exact")]
+        type_: DuplicateType,
+
+        /// Duration tolerance for similar detection (in seconds)
+        #[arg(short = 'd', long, default_value = "3")]
+        duration_tolerance: u32,
+
+        /// Show file paths
+        #[arg(short, long)]
+        paths: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -123,6 +137,16 @@ enum ConfigAction {
 enum ListType {
     Tracks,
     Albums,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum DuplicateType {
+    /// Exact byte-for-byte duplicates (same file hash)
+    Exact,
+    /// Similar tracks based on metadata (title, artist, duration)
+    Similar,
+    /// Both exact and similar duplicates
+    All,
 }
 
 /// Load configuration from file or use defaults.
@@ -206,6 +230,14 @@ async fn main() -> Result<()> {
             cmd_web(&lib_path, &host, port).await
         }
         Commands::Config { action } => cmd_config(action, cli.config.as_deref()),
+        Commands::Duplicates {
+            type_,
+            duration_tolerance,
+            paths,
+        } => {
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
+            cmd_duplicates(&lib_path, type_, duration_tolerance, paths).await
+        }
     }
 }
 
@@ -546,6 +578,101 @@ async fn cmd_stats(lib_path: &Path) -> Result<()> {
     println!();
     println!("Tracks: {track_count}");
     println!("Albums: {album_count}");
+
+    Ok(())
+}
+
+/// Find duplicate tracks in the library.
+async fn cmd_duplicates(
+    lib_path: &Path,
+    dup_type: DuplicateType,
+    duration_tolerance_secs: u32,
+    show_paths: bool,
+) -> Result<()> {
+    // Check if library exists
+    if !lib_path.exists() {
+        eprintln!("Library not found at: {}", lib_path.display());
+        eprintln!("Run 'apollo init' first to create a library");
+        std::process::exit(1);
+    }
+
+    // Connect to database
+    let db_url = format!("sqlite:{}", lib_path.display());
+    let db = SqliteLibrary::new(&db_url)
+        .await
+        .context("Failed to open library database")?;
+
+    let duration_tolerance_ms = i64::from(duration_tolerance_secs) * 1000;
+    let mut total_groups = 0;
+    let mut total_duplicates = 0;
+
+    // Find exact duplicates
+    if matches!(dup_type, DuplicateType::Exact | DuplicateType::All) {
+        let exact_groups = db.find_exact_duplicates().await?;
+
+        if !exact_groups.is_empty() {
+            println!("=== Exact Duplicates (Same File Hash) ===");
+            println!();
+
+            for (i, group) in exact_groups.iter().enumerate() {
+                total_groups += 1;
+                total_duplicates += group.len() - 1; // All but the first are duplicates
+
+                println!("Group {} ({} files with same content):", i + 1, group.len());
+
+                for track in group {
+                    let duration = format_duration(track.duration);
+                    println!("  {} - {} ({duration})", track.artist, track.title);
+                    if show_paths {
+                        println!("    {}", track.path.display());
+                    }
+                }
+                println!();
+            }
+        }
+    }
+
+    // Find similar duplicates
+    if matches!(dup_type, DuplicateType::Similar | DuplicateType::All) {
+        let similar_groups = db.find_similar_duplicates(duration_tolerance_ms).await?;
+
+        if !similar_groups.is_empty() {
+            println!("=== Similar Duplicates (Matching Metadata) ===");
+            println!("(tolerance: {duration_tolerance_secs} seconds)");
+            println!();
+
+            for (i, group) in similar_groups.iter().enumerate() {
+                total_groups += 1;
+                total_duplicates += group.len() - 1;
+
+                println!("Group {} ({} similar tracks):", i + 1, group.len());
+
+                for track in group {
+                    let duration = format_duration(track.duration);
+                    let album = track.album_title.as_deref().unwrap_or("-");
+                    let format = &track.format;
+
+                    println!(
+                        "  {} - {} [{album}] ({duration}, {format})",
+                        track.artist, track.title
+                    );
+                    if show_paths {
+                        println!("    {}", track.path.display());
+                    }
+                }
+                println!();
+            }
+        }
+    }
+
+    // Summary
+    if total_groups == 0 {
+        println!("No duplicates found.");
+    } else {
+        println!("Summary: {total_groups} groups, {total_duplicates} potential duplicates");
+        println!();
+        println!("Tip: Use --paths to see file locations");
+    }
 
     Ok(())
 }
