@@ -4,9 +4,9 @@
 
 ### Priority 1: Project Setup
 - [DONE] Initialize Cargo workspace with all crates (2025-11-28)
-- [TODO] Set up CI/CD with GitHub Actions
-- [TODO] Configure code coverage reporting
-- [TODO] Set up pre-commit hooks
+- [DONE] Set up CI/CD with GitHub Actions (2025-11-28)
+- [DONE] Configure code coverage reporting (2025-11-28)
+- [DONE] Set up pre-commit hooks (2025-11-28)
 
 ### Priority 2: Core Types
 - [DONE] Define Track metadata struct (2025-11-28)
@@ -92,6 +92,7 @@
 - [2025-11-28] Implement MusicBrainz API client with search and rate limiting
 - [2025-11-28] Implement Web API with Axum (tracks, albums, search, stats endpoints)
 - [2025-11-28] Implement Lua plugin system with mlua, hooks, and example plugins
+- [2025-11-28] Set up CI/CD, code coverage, and pre-commit hooks
 
 ---
 

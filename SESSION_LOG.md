@@ -33,6 +33,39 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (CI/CD & Pre-commit)
+
+### Completed
+- Fixed CI workflow to trigger on `master` branch (was configured for `main`)
+- Verified code coverage is already configured via cargo-llvm-cov and codecov
+- Added pre-commit hook support:
+  - Created `.pre-commit-config.yaml` for pre-commit framework
+  - Created `scripts/pre-commit.sh` for manual use
+  - Created `scripts/pre-push.sh` for pre-push testing
+- Fixed clippy warnings in test code:
+  - Removed redundant `.clone()` calls in proptest tests (apollo-core)
+  - Fixed uninlined format args in apollo-lua tests
+- All 83 tests passing
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use local hooks in pre-commit-config (no external repos needed for Rust)
+- Provide both pre-commit framework config and standalone scripts for flexibility
+
+### Decisions Requested
+- None
+
+### Notes
+- Remaining TODO tasks: fingerprint search, response caching, OpenAPI docs
+- Project setup (Priority 1) is now complete
+
+---
+
 ## Session: 2025-11-28 (Lua Integration)
 
 ### Completed
