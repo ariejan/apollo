@@ -25,12 +25,12 @@
 - [DONE] Write integration tests (2025-11-28)
 
 ### Priority 4: Audio File Handling
-- [TODO] Implement MP3 tag reading
-- [TODO] Implement FLAC tag reading
-- [TODO] Implement OGG tag reading
-- [TODO] Implement tag writing
-- [TODO] Directory scanning
-- [TODO] File hashing for deduplication
+- [DONE] Implement MP3 tag reading (2025-11-28)
+- [DONE] Implement FLAC tag reading (2025-11-28)
+- [DONE] Implement OGG tag reading (2025-11-28)
+- [DONE] Implement tag writing (2025-11-28)
+- [DONE] Directory scanning (2025-11-28)
+- [DONE] File hashing for deduplication (2025-11-28)
 
 ### Priority 5: MusicBrainz Integration
 - [TODO] MusicBrainz API client
@@ -87,6 +87,7 @@
 - [2025-11-28] Basic CLI structure with clap
 - [2025-11-28] Write property-based tests for core types and query parser
 - [2025-11-28] Implement SQLite database layer with full CRUD and search
+- [2025-11-28] Implement audio file handling (MP3/FLAC/OGG reading, writing, scanning, hashing)
 
 ---
 

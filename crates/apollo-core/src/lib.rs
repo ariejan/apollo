@@ -11,4 +11,4 @@ pub mod metadata;
 pub mod query;
 
 pub use error::Error;
-pub use metadata::{Album, Artist, AudioFormat, Track};
+pub use metadata::{Album, AlbumId, Artist, AudioFormat, Track, TrackId};

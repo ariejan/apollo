@@ -33,6 +33,49 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (audio handling)
+
+### Completed
+- Implemented complete apollo-audio crate with:
+  - `read_metadata()`: Read tags from audio files (MP3, FLAC, OGG, etc.)
+    - Extracts title, artist, album, track/disc numbers, year, genres
+    - Extracts MusicBrainz IDs and AcoustID fingerprint IDs
+    - Falls back to filename if title is missing
+    - Auto-detects audio format from file type
+  - `write_metadata()`: Write Track data back to audio files
+    - Supports ID3v2 for MP3, VorbisComments for FLAC/OGG, MP4 tags
+    - Creates tags if none exist
+  - `scan_directory()`: Recursively scan directories for audio files
+    - Configurable recursion depth, symlink following
+    - Optional progress callback and cancellation support
+    - Returns ScanResult with tracks and errors
+  - `compute_file_hash()`: SHA-256 hash for deduplication
+- Added dependencies: sha2, hex, walkdir
+- All 10 tests passing in apollo-audio
+- Total 38 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use lofty crate for tag reading/writing (supports all common formats)
+- Store AcoustID under custom key "ACOUSTID_ID" (not standard in lofty)
+- Default to ID3v2 tag type when creating new tags for unknown formats
+- Use 64KB buffer for file hashing (balance of speed and memory)
+
+### Decisions Requested
+- None
+
+### Notes
+- Audio handling is complete for MVP requirements
+- Next priorities: CLI commands (init, import, list, query)
+- MusicBrainz integration can come after basic CLI works
+
+---
+
 ## Session: 2025-11-28 (continued)
 
 ### Completed
