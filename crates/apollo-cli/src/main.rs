@@ -6,8 +6,8 @@
 #![allow(clippy::cast_possible_truncation)]
 
 use anyhow::{Context, Result};
-use apollo_audio::{ScanOptions, ScanProgress, scan_directory};
-use apollo_core::Config;
+use apollo_audio::{OrganizeOptions, ScanOptions, ScanProgress, organize_file, scan_directory};
+use apollo_core::{Config, PathTemplate};
 use apollo_db::SqliteLibrary;
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -104,6 +104,35 @@ enum Commands {
         /// Show file paths
         #[arg(short, long)]
         paths: bool,
+    },
+    /// Organize files using path templates
+    Organize {
+        /// Destination directory for organized files
+        destination: PathBuf,
+
+        /// Path template (default from config, or "$artist/$album/$track - $title")
+        #[arg(short, long)]
+        template: Option<String>,
+
+        /// Move files instead of copying
+        #[arg(short, long)]
+        move_files: bool,
+
+        /// Overwrite existing files
+        #[arg(short = 'f', long)]
+        force: bool,
+
+        /// Preview changes without making them
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+
+        /// Only organize specific tracks (by ID)
+        #[arg(short = 'i', long)]
+        track_ids: Vec<String>,
+
+        /// Maximum number of tracks to organize
+        #[arg(short, long)]
+        limit: Option<u32>,
     },
 }
 
@@ -237,6 +266,29 @@ async fn main() -> Result<()> {
         } => {
             let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_duplicates(&lib_path, type_, duration_tolerance, paths).await
+        }
+        Commands::Organize {
+            destination,
+            template,
+            move_files,
+            force,
+            dry_run,
+            track_ids,
+            limit,
+        } => {
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
+            let template_str = template.unwrap_or_else(|| config.paths.path_template.clone());
+            cmd_organize(
+                &lib_path,
+                &destination,
+                &template_str,
+                move_files,
+                force,
+                dry_run,
+                &track_ids,
+                limit,
+            )
+            .await
         }
     }
 }
@@ -672,6 +724,167 @@ async fn cmd_duplicates(
         println!("Summary: {total_groups} groups, {total_duplicates} potential duplicates");
         println!();
         println!("Tip: Use --paths to see file locations");
+    }
+
+    Ok(())
+}
+
+/// Organize files using path templates.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+async fn cmd_organize(
+    lib_path: &Path,
+    destination: &Path,
+    template_str: &str,
+    move_files: bool,
+    force: bool,
+    dry_run: bool,
+    track_ids: &[String],
+    limit: Option<u32>,
+) -> Result<()> {
+    // Check if library exists
+    if !lib_path.exists() {
+        eprintln!("Library not found at: {}", lib_path.display());
+        eprintln!("Run 'apollo init' first to create a library");
+        std::process::exit(1);
+    }
+
+    // Parse the template
+    let template = PathTemplate::parse(template_str)
+        .with_context(|| format!("Invalid path template: {template_str}"))?;
+
+    println!("Using template: {template_str}");
+    println!("Destination: {}", destination.display());
+    if move_files {
+        println!("Mode: MOVE (files will be moved, not copied)");
+    } else {
+        println!("Mode: COPY");
+    }
+    if dry_run {
+        println!("DRY RUN - no files will be modified");
+    }
+    println!();
+
+    // Connect to database
+    let db_url = format!("sqlite:{}", lib_path.display());
+    let db = SqliteLibrary::new(&db_url)
+        .await
+        .context("Failed to open library database")?;
+
+    // Get tracks to organize
+    let tracks = if track_ids.is_empty() {
+        // Get all tracks (with optional limit)
+        let limit = limit.unwrap_or(u32::MAX);
+        db.list_tracks(limit, 0).await?
+    } else {
+        // Get specific tracks by ID
+        let mut result = Vec::new();
+        for id_str in track_ids {
+            let id = uuid::Uuid::parse_str(id_str)
+                .with_context(|| format!("Invalid track ID: {id_str}"))?;
+            let track_id = apollo_core::TrackId(id);
+            if let Some(track) = db.get_track(&track_id).await? {
+                result.push(track);
+            } else {
+                eprintln!("Warning: Track not found: {id_str}");
+            }
+        }
+        result
+    };
+
+    if tracks.is_empty() {
+        println!("No tracks to organize.");
+        return Ok(());
+    }
+
+    let total = tracks.len();
+    println!("Found {total} tracks to organize");
+    println!();
+
+    // Set up progress bar
+    let progress_bar = ProgressBar::new(total as u64);
+    progress_bar.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+        )
+        .unwrap()
+        .progress_chars("█▓▒░"),
+    );
+
+    let mut organized = 0u64;
+    let mut skipped = 0u64;
+    let mut failed = 0u64;
+
+    let options = OrganizeOptions {
+        move_files,
+        overwrite: force,
+        create_dirs: true,
+    };
+
+    for track in &tracks {
+        progress_bar.inc(1);
+
+        // Check if source file exists
+        if !track.path.exists() {
+            tracing::warn!("Source file missing: {}", track.path.display());
+            skipped += 1;
+            continue;
+        }
+
+        if dry_run {
+            // Just preview the destination
+            let ctx = apollo_core::TemplateContext::from_track(track);
+            match template.render_with_extension(&ctx) {
+                Ok(relative) => {
+                    let dest = destination.join(&relative);
+                    println!("{} -> {}", track.path.display(), dest.display());
+                    organized += 1;
+                }
+                Err(e) => {
+                    eprintln!("Template error for {}: {e}", track.path.display());
+                    failed += 1;
+                }
+            }
+        } else {
+            // Actually organize the file
+            match organize_file(&track.path, destination, &template, track, &options) {
+                Ok(result) => {
+                    tracing::debug!(
+                        "{} {} -> {}",
+                        if result.moved { "Moved" } else { "Copied" },
+                        result.source.display(),
+                        result.destination.display()
+                    );
+                    organized += 1;
+                }
+                Err(e) => {
+                    // Check if it's just a "file exists" error and we should skip
+                    let err_str = e.to_string();
+                    if err_str.contains("already exists") {
+                        skipped += 1;
+                    } else {
+                        tracing::warn!("Failed to organize {}: {e}", track.path.display());
+                        failed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    progress_bar.finish_and_clear();
+
+    println!();
+    if dry_run {
+        println!("Dry run complete:");
+        println!("  Would organize: {organized}");
+    } else {
+        println!("Organization complete:");
+        println!("  Organized: {organized}");
+    }
+    if skipped > 0 {
+        println!("  Skipped: {skipped}");
+    }
+    if failed > 0 {
+        println!("  Failed: {failed}");
     }
 
     Ok(())

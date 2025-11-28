@@ -38,6 +38,7 @@
 //! ```
 
 mod error;
+mod fileops;
 mod fingerprint;
 mod hash;
 mod reader;
@@ -45,6 +46,7 @@ mod scanner;
 mod writer;
 
 pub use error::AudioError;
+pub use fileops::{OrganizeOptions, OrganizeResult, organize_file, preview_destination};
 pub use fingerprint::{FingerprintResult, generate_fingerprint};
 pub use hash::compute_file_hash;
 pub use reader::{AudioProperties, read_metadata};
