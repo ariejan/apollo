@@ -35,9 +35,9 @@
 ### Priority 5: MusicBrainz Integration
 - [DONE] MusicBrainz API client (2025-11-28)
 - [DONE] Search by metadata (2025-11-28)
-- [TODO] Search by fingerprint
+- [DONE] Search by fingerprint (2025-11-28)
 - [DONE] Rate limiting (2025-11-28)
-- [TODO] Caching responses
+- [DONE] Caching responses (2025-11-28)
 
 ### Priority 6: CLI Foundation
 - [DONE] Basic CLI structure with clap (2025-11-28)
@@ -94,6 +94,8 @@
 - [2025-11-28] Implement Lua plugin system with mlua, hooks, and example plugins
 - [2025-11-28] Set up CI/CD, code coverage, and pre-commit hooks
 - [2025-11-28] Add OpenAPI documentation with Swagger UI
+- [2025-11-28] Add MusicBrainz response caching with TTL and disk persistence
+- [2025-11-28] Add audio fingerprinting and AcoustID integration
 
 ---
 

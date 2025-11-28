@@ -36,23 +36,42 @@ This file tracks what was accomplished in each Claude Code session.
 ## Session: 2025-11-28 (Response Caching & Fingerprint)
 
 ### Completed
-- (in progress)
+- Added MusicBrainz response caching system
+  - Generic `ResponseCache<K, V>` with configurable TTL and max size
+  - Optional disk persistence using JSON serialization
+  - Cache keys for recording/release searches and lookups
+  - `CachedMusicBrainzClient` wrapper with caching for all operations
+  - Added `Serialize` derive to MusicBrainz types
+  - Added `CacheStats` for monitoring cache usage
+- Added audio fingerprinting with Chromaprint
+  - Integrated `rusty-chromaprint` for pure Rust fingerprint generation
+  - Integrated `symphonia` for audio decoding (MP3, FLAC, OGG, etc.)
+  - `FingerprintResult` type with fingerprint string and duration
+  - Base64-like encoding for fingerprint data
+- Added AcoustID integration
+  - `AcoustIdClient` for fingerprint lookups via AcoustID API
+  - Rate limiting (3 requests per second max)
+  - Support for retrieving MusicBrainz recording IDs from fingerprints
+  - `find_best_match()` for automatic best match selection
 
 ### In Progress
-- Implementing MusicBrainz response caching
-- Fingerprint search implementation
+- None
 
 ### Blockers Encountered
-- None yet
+- None
 
 ### Decisions Made
-- (none yet)
+- Used `rusty-chromaprint` (pure Rust) instead of C bindings for portability
+- Used `symphonia` for audio decoding as it's a pure Rust solution
+- Limited fingerprint generation to first 120 seconds for efficiency
+- Response cache uses in-memory storage with optional disk persistence
 
 ### Decisions Requested
 - None
 
 ### Notes
-- Continuing from previous session to complete remaining MVP tasks
+- All MVP tasks from Priority 5 (MusicBrainz Integration) are now complete
+- 98+ tests passing across all crates
 
 ---
 
