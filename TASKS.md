@@ -67,7 +67,7 @@
 - [DONE] Duplicate detection (2025-11-28)
 - [TODO] Smart playlists
 - [TODO] Web UI frontend
-- [TODO] Path templates for file organization
+- [IN PROGRESS] Path templates for file organization
 
 ---
 
