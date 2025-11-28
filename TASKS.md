@@ -41,10 +41,10 @@
 
 ### Priority 6: CLI Foundation
 - [DONE] Basic CLI structure with clap (2025-11-28)
-- [TODO] `init` command (create library)
-- [TODO] `import` command (scan directory)
-- [TODO] `list` command (show library)
-- [TODO] `query` command (search)
+- [DONE] `init` command (create library) (2025-11-28)
+- [DONE] `import` command (scan directory) (2025-11-28)
+- [DONE] `list` command (show library) (2025-11-28)
+- [DONE] `query` command (search) (2025-11-28)
 
 ### Priority 7: Web API
 - [TODO] Axum server setup
@@ -88,6 +88,7 @@
 - [2025-11-28] Write property-based tests for core types and query parser
 - [2025-11-28] Implement SQLite database layer with full CRUD and search
 - [2025-11-28] Implement audio file handling (MP3/FLAC/OGG reading, writing, scanning, hashing)
+- [2025-11-28] Implement CLI commands (init, import, list, query, stats)
 
 ---
 

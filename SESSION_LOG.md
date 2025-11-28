@@ -33,6 +33,52 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (CLI commands)
+
+### Completed
+- Implemented complete CLI with all core commands:
+  - `init`: Create a new library database (default: ~/.apollo/apollo.db)
+    - Creates parent directories if needed
+    - Checks for existing library
+  - `import`: Scan directory and import audio files
+    - Progress bars for scanning and importing
+    - Handles duplicates gracefully (skips)
+    - Shows summary of imported/skipped/failed
+  - `list`: List tracks or albums with pagination
+    - Supports --type tracks/albums
+    - Supports --limit and --offset
+    - Shows formatted output with duration, track numbers
+  - `query`: Search the library using FTS
+    - Supports simple text search (auto-wildcards)
+    - Supports FTS5 syntax for advanced queries
+  - `stats`: Show library statistics
+  - Global `--library` flag for custom db path
+- Added `dirs` dependency for home directory detection
+- Total 38 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Store library database at ~/.apollo/apollo.db by default
+- Use FTS5 prefix matching (word*) for simple queries
+- Allow raw FTS5 syntax when query contains special chars
+- Add #[allow(clippy::too_many_lines)] for import function
+- Add #[allow(clippy::cast_possible_truncation)] for CLI display casts
+
+### Decisions Requested
+- None
+
+### Notes
+- CLI is now fully functional for basic music library management
+- Next priority: MusicBrainz integration or Web API
+- The import command doesn't create Album entries yet (tracks only)
+
+---
+
 ## Session: 2025-11-28 (audio handling)
 
 ### Completed
