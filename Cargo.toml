@@ -38,6 +38,8 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 
 # Audio
 lofty = "0.21"
+symphonia = { version = "0.5", features = ["all-codecs"] }
+rusty-chromaprint = "0.3"
 
 # Web framework
 axum = "0.7"

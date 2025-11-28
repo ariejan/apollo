@@ -8,6 +8,8 @@ description = "Audio file handling for Apollo music library manager"
 [dependencies]
 apollo-core = { workspace = true }
 lofty = { workspace = true }
+symphonia = { workspace = true }
+rusty-chromaprint = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }

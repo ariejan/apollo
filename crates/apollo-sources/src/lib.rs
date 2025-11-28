@@ -1,7 +1,8 @@
 //! # Apollo Sources
 //!
 //! Integration with external metadata sources like
-//! [MusicBrainz](https://musicbrainz.org/) and [Discogs](https://discogs.com/).
+//! [MusicBrainz](https://musicbrainz.org/), [AcoustID](https://acoustid.org/),
+//! and [Discogs](https://discogs.com/).
 //!
 //! This crate provides clients for fetching music metadata from online databases.
 //! All clients implement rate limiting to comply with API requirements.
@@ -9,6 +10,7 @@
 //! # Supported Sources
 //!
 //! - [MusicBrainz](https://musicbrainz.org/): Community-maintained open music encyclopedia
+//! - [AcoustID](https://acoustid.org/): Audio fingerprint identification service
 //! - Discogs: (planned)
 //!
 //! # Caching
@@ -27,6 +29,23 @@
 //! // Search for a recording
 //! let recordings = client.search_recordings("Yesterday", Some("Beatles"), 5).await?;
 //! println!("Found {} recordings", recordings.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Fingerprint Lookup Example
+//!
+//! ```no_run
+//! use apollo_sources::acoustid::AcoustIdClient;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = AcoustIdClient::new("your-api-key")?;
+//!
+//! // Look up a track by its fingerprint
+//! let results = client.lookup("fingerprint-string", 180).await?;
+//! for result in results {
+//!     println!("Found: {} (score: {:.2})", result.id, result.score);
+//! }
 //! # Ok(())
 //! # }
 //! ```
@@ -60,6 +79,7 @@
 //! # }
 //! ```
 
+pub mod acoustid;
 pub mod cache;
 mod error;
 pub mod musicbrainz;
