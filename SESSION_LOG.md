@@ -33,6 +33,32 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Lua Integration)
+
+### Completed
+- Implemented complete Lua plugin system in apollo-lua crate:
+  - `LuaRuntime` for managing the Lua VM and plugins
+  - `LuaTrack` and `LuaAlbum` wrappers exposing Track/Album to Lua with read/write properties
+  - Plugin loading system with metadata parsing from Lua source
+  - Hook system supporting 8 hook types:
+    - `on_import` / `post_import` for track imports
+    - `on_update` / `post_update` for metadata updates
+    - `on_album_import` / `post_album_import` for album imports
+    - `on_init` / `on_close` for lifecycle events
+  - Hook results: "continue", "skip", or "abort" with reason
+  - Apollo Lua module with logging functions and type factories
+- Created example plugins:
+  - `clean_tags.lua` - Cleans and normalizes track metadata during import
+  - `skip_hidden.lua` - Skips hidden files and system files during import
+- 30 unit tests for the Lua crate
+
+### Notes
+- The Lua integration provides a powerful extension point for users to customize import behavior
+- Plugins can modify track/album metadata, skip items, or abort operations
+- The hook system chains multiple plugins, stopping on first skip/abort
+
+---
+
 ## Session: 2025-11-28 (Web API)
 
 ### Completed

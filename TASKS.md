@@ -54,11 +54,11 @@
 - [TODO] OpenAPI documentation
 
 ### Priority 8: Lua Integration
-- [TODO] mlua setup
-- [TODO] Expose Track/Album to Lua
-- [TODO] Plugin loading system
-- [TODO] Event hooks (on_import, on_update)
-- [TODO] Example plugin
+- [DONE] mlua setup (2025-11-28)
+- [DONE] Expose Track/Album to Lua (2025-11-28)
+- [DONE] Plugin loading system (2025-11-28)
+- [DONE] Event hooks (on_import, on_update, on_album_import, etc.) (2025-11-28)
+- [DONE] Example plugins (clean_tags, skip_hidden) (2025-11-28)
 
 ---
 
@@ -91,6 +91,7 @@
 - [2025-11-28] Implement CLI commands (init, import, list, query, stats)
 - [2025-11-28] Implement MusicBrainz API client with search and rate limiting
 - [2025-11-28] Implement Web API with Axum (tracks, albums, search, stats endpoints)
+- [2025-11-28] Implement Lua plugin system with mlua, hooks, and example plugins
 
 ---
 
