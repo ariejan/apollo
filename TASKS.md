@@ -60,18 +60,18 @@
 - [DONE] Event hooks (on_import, on_update, on_album_import, etc.) (2025-11-28)
 - [DONE] Example plugins (clean_tags, skip_hidden) (2025-11-28)
 
+### Priority 9
+- [TODO] Discogs integration
+- [TODO] Album art fetching
+- [TODO] Duplicate detection
+- [TODO] Smart playlists
+- [TODO] Web UI frontend
+- [TODO] Configuration file support
+- [TODO] Path templates for file organization
+
 ---
 
 ## Backlog
-
-### Future Features
-- [ ] Discogs integration
-- [ ] Album art fetching
-- [ ] Duplicate detection
-- [ ] Smart playlists
-- [ ] Web UI frontend
-- [ ] Configuration file support
-- [ ] Path templates for file organization
 
 ### Technical Debt
 - (none yet)
