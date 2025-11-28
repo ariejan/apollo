@@ -51,7 +51,7 @@
 - [DONE] GET /api/tracks endpoint (2025-11-28)
 - [DONE] GET /api/albums endpoint (2025-11-28)
 - [DONE] Search endpoint (2025-11-28)
-- [TODO] OpenAPI documentation
+- [DONE] OpenAPI documentation (2025-11-28)
 
 ### Priority 8: Lua Integration
 - [DONE] mlua setup (2025-11-28)
@@ -93,6 +93,7 @@
 - [2025-11-28] Implement Web API with Axum (tracks, albums, search, stats endpoints)
 - [2025-11-28] Implement Lua plugin system with mlua, hooks, and example plugins
 - [2025-11-28] Set up CI/CD, code coverage, and pre-commit hooks
+- [2025-11-28] Add OpenAPI documentation with Swagger UI
 
 ---
 

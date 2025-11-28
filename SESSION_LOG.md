@@ -33,6 +33,46 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (OpenAPI Documentation)
+
+### Completed
+- Added OpenAPI/Swagger documentation to the Web API:
+  - Integrated `utoipa` for OpenAPI spec generation from Rust code
+  - Integrated `utoipa-swagger-ui` for interactive documentation UI
+  - Added `ToSchema` derives to all core types (Track, Album, Artist, TrackId, AlbumId, AudioFormat)
+  - Added example values and descriptions to all schema fields
+  - Added `#[utoipa::path]` annotations to all API handlers with:
+    - Request parameters documentation
+    - Response types and status codes
+    - Tag-based endpoint grouping
+  - Created `ApiDoc` struct with full OpenAPI specification
+  - Swagger UI available at `/swagger-ui`
+  - Raw OpenAPI JSON at `/api-docs/openapi.json`
+- Fixed clippy warnings for doc_markdown (MusicBrainz, AcoustID links)
+- Added `reqwest` feature to utoipa-swagger-ui for downloading Swagger UI assets
+- All 83 tests passing
+
+### In Progress
+- None
+
+### Blockers Encountered
+- utoipa-swagger-ui build failed initially due to missing curl
+- Fixed by enabling `reqwest` feature for downloads
+
+### Decisions Made
+- Use utoipa v5 with axum_extras, chrono, uuid features
+- Add module-level clippy allow for needless_for_each (macro-generated code)
+- Use value_type = String for PathBuf in schemas (utoipa doesn't support PathBuf)
+
+### Decisions Requested
+- None
+
+### Notes
+- Remaining TODO tasks: fingerprint search, response caching
+- Web API is now fully documented with interactive Swagger UI
+
+---
+
 ## Session: 2025-11-28 (CI/CD & Pre-commit)
 
 ### Completed
