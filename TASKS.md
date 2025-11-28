@@ -66,7 +66,7 @@
 - [DONE] Album art fetching (2025-11-28)
 - [DONE] Duplicate detection (2025-11-28)
 - [DONE] Path templates for file organization (2025-11-28)
-- [TODO] Smart playlists
+- [IN PROGRESS] Smart playlists
 - [TODO] Web UI frontend
 
 ---

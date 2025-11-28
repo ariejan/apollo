@@ -13,6 +13,7 @@
 
 use crate::error::{DbError, DbResult};
 use apollo_core::metadata::{Album, AlbumId, AudioFormat, Track, TrackId};
+use apollo_core::playlist::{Playlist, PlaylistId, PlaylistKind, PlaylistLimit, PlaylistSort};
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -61,6 +62,11 @@ impl SqliteLibrary {
 
         // Run the initial schema migration
         sqlx::query(include_str!("../migrations/0001_initial_schema.sql"))
+            .execute(&self.pool)
+            .await?;
+
+        // Run the playlists migration
+        sqlx::query(include_str!("../migrations/0002_playlists.sql"))
             .execute(&self.pool)
             .await?;
 
@@ -600,6 +606,607 @@ impl SqliteLibrary {
 
         row.map(|r| row_to_track(&r)).transpose()
     }
+
+    // ========================================================================
+    // Playlist operations
+    // ========================================================================
+
+    /// Get a playlist by its ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_playlist(&self, id: &PlaylistId) -> DbResult<Option<Playlist>> {
+        let id_str = id.0.to_string();
+
+        let row = sqlx::query(
+            r"SELECT id, name, description, kind, query, sort, max_tracks, max_duration_secs,
+                     created_at, modified_at
+              FROM playlists WHERE id = ?",
+        )
+        .bind(&id_str)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(r) => {
+                let mut playlist = row_to_playlist(&r)?;
+
+                // Load track IDs for static playlists
+                if playlist.kind == PlaylistKind::Static {
+                    playlist.track_ids = self.get_playlist_track_ids(&playlist.id).await?;
+                }
+
+                Ok(Some(playlist))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Get the track IDs for a playlist.
+    async fn get_playlist_track_ids(&self, playlist_id: &PlaylistId) -> DbResult<Vec<TrackId>> {
+        let id_str = playlist_id.0.to_string();
+
+        let rows = sqlx::query(
+            r"SELECT track_id FROM playlist_tracks
+              WHERE playlist_id = ?
+              ORDER BY position",
+        )
+        .bind(&id_str)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut track_ids = Vec::with_capacity(rows.len());
+        for row in rows {
+            let track_id_str: String = row.get("track_id");
+            let track_id =
+                Uuid::parse_str(&track_id_str).map_err(|e| DbError::InvalidData(e.to_string()))?;
+            track_ids.push(TrackId(track_id));
+        }
+
+        Ok(track_ids)
+    }
+
+    /// Add a playlist to the library.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn add_playlist(&self, playlist: &Playlist) -> DbResult<PlaylistId> {
+        let id_str = playlist.id.0.to_string();
+        let kind_str = format!("{}", playlist.kind);
+        let query_json = playlist
+            .query
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| DbError::Serialization(e.to_string()))?;
+        let sort_str = format!("{:?}", playlist.sort).to_lowercase();
+        let created_at_str = playlist.created_at.to_rfc3339();
+        let modified_at_str = playlist.modified_at.to_rfc3339();
+
+        let max_tracks = playlist.limit.as_ref().and_then(|l| l.max_tracks);
+        let max_duration_secs = playlist
+            .limit
+            .as_ref()
+            .and_then(|l| l.max_duration_secs)
+            .map(|d| d as i64);
+
+        sqlx::query(
+            r"INSERT INTO playlists (id, name, description, kind, query, sort, max_tracks,
+                                     max_duration_secs, created_at, modified_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id_str)
+        .bind(&playlist.name)
+        .bind(&playlist.description)
+        .bind(&kind_str)
+        .bind(&query_json)
+        .bind(&sort_str)
+        .bind(max_tracks.map(|n| n as i32))
+        .bind(max_duration_secs)
+        .bind(&created_at_str)
+        .bind(&modified_at_str)
+        .execute(&self.pool)
+        .await?;
+
+        // Add track IDs for static playlists
+        if playlist.kind == PlaylistKind::Static {
+            self.set_playlist_tracks(&playlist.id, &playlist.track_ids)
+                .await?;
+        }
+
+        Ok(playlist.id.clone())
+    }
+
+    /// Set the tracks for a static playlist.
+    async fn set_playlist_tracks(
+        &self,
+        playlist_id: &PlaylistId,
+        track_ids: &[TrackId],
+    ) -> DbResult<()> {
+        let playlist_id_str = playlist_id.0.to_string();
+        let now = Utc::now().to_rfc3339();
+
+        // Delete existing tracks
+        sqlx::query("DELETE FROM playlist_tracks WHERE playlist_id = ?")
+            .bind(&playlist_id_str)
+            .execute(&self.pool)
+            .await?;
+
+        // Insert new tracks
+        for (position, track_id) in track_ids.iter().enumerate() {
+            let track_id_str = track_id.0.to_string();
+            sqlx::query(
+                r"INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at)
+                  VALUES (?, ?, ?, ?)",
+            )
+            .bind(&playlist_id_str)
+            .bind(&track_id_str)
+            .bind(position as i32)
+            .bind(&now)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Update an existing playlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playlist doesn't exist or the database operation fails.
+    pub async fn update_playlist(&self, playlist: &Playlist) -> DbResult<()> {
+        let id_str = playlist.id.0.to_string();
+        let kind_str = format!("{}", playlist.kind);
+        let query_json = playlist
+            .query
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|e| DbError::Serialization(e.to_string()))?;
+        let sort_str = format!("{:?}", playlist.sort).to_lowercase();
+        let modified_at_str = Utc::now().to_rfc3339();
+
+        let max_tracks = playlist.limit.as_ref().and_then(|l| l.max_tracks);
+        let max_duration_secs = playlist
+            .limit
+            .as_ref()
+            .and_then(|l| l.max_duration_secs)
+            .map(|d| d as i64);
+
+        let result = sqlx::query(
+            r"UPDATE playlists SET
+                name = ?, description = ?, kind = ?, query = ?, sort = ?,
+                max_tracks = ?, max_duration_secs = ?, modified_at = ?
+              WHERE id = ?",
+        )
+        .bind(&playlist.name)
+        .bind(&playlist.description)
+        .bind(&kind_str)
+        .bind(&query_json)
+        .bind(&sort_str)
+        .bind(max_tracks.map(|n| n as i32))
+        .bind(max_duration_secs)
+        .bind(&modified_at_str)
+        .bind(&id_str)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(DbError::NotFound(format!("playlist {id_str}")));
+        }
+
+        // Update track IDs for static playlists
+        if playlist.kind == PlaylistKind::Static {
+            self.set_playlist_tracks(&playlist.id, &playlist.track_ids)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Remove a playlist from the library.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playlist doesn't exist or the database operation fails.
+    pub async fn remove_playlist(&self, id: &PlaylistId) -> DbResult<()> {
+        let id_str = id.0.to_string();
+
+        // The playlist_tracks entries are deleted automatically via ON DELETE CASCADE
+        let result = sqlx::query("DELETE FROM playlists WHERE id = ?")
+            .bind(&id_str)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(DbError::NotFound(format!("playlist {id_str}")));
+        }
+
+        Ok(())
+    }
+
+    /// List all playlists in the library.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn list_playlists(&self) -> DbResult<Vec<Playlist>> {
+        let rows = sqlx::query(
+            r"SELECT id, name, description, kind, query, sort, max_tracks, max_duration_secs,
+                     created_at, modified_at
+              FROM playlists
+              ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut playlists = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let mut playlist = row_to_playlist(row)?;
+
+            // Load track IDs for static playlists
+            if playlist.kind == PlaylistKind::Static {
+                playlist.track_ids = self.get_playlist_track_ids(&playlist.id).await?;
+            }
+
+            playlists.push(playlist);
+        }
+
+        Ok(playlists)
+    }
+
+    /// Count total playlists in the library.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn count_playlists(&self) -> DbResult<u64> {
+        let row = sqlx::query("SELECT COUNT(*) as count FROM playlists")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(row.get::<i64, _>("count") as u64)
+    }
+
+    /// Add a track to a static playlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the playlist doesn't exist or the database operation fails.
+    pub async fn add_track_to_playlist(
+        &self,
+        playlist_id: &PlaylistId,
+        track_id: &TrackId,
+    ) -> DbResult<()> {
+        let playlist_id_str = playlist_id.0.to_string();
+        let track_id_str = track_id.0.to_string();
+        let now = Utc::now().to_rfc3339();
+
+        // Get the next position
+        let row = sqlx::query(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM playlist_tracks WHERE playlist_id = ?",
+        )
+        .bind(&playlist_id_str)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let next_pos: i32 = row.get("next_pos");
+
+        sqlx::query(
+            r"INSERT OR REPLACE INTO playlist_tracks (playlist_id, track_id, position, added_at)
+              VALUES (?, ?, ?, ?)",
+        )
+        .bind(&playlist_id_str)
+        .bind(&track_id_str)
+        .bind(next_pos)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        // Update playlist modified_at
+        let modified_at = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE playlists SET modified_at = ? WHERE id = ?")
+            .bind(&modified_at)
+            .bind(&playlist_id_str)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Remove a track from a static playlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn remove_track_from_playlist(
+        &self,
+        playlist_id: &PlaylistId,
+        track_id: &TrackId,
+    ) -> DbResult<()> {
+        let playlist_id_str = playlist_id.0.to_string();
+        let track_id_str = track_id.0.to_string();
+
+        sqlx::query("DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?")
+            .bind(&playlist_id_str)
+            .bind(&track_id_str)
+            .execute(&self.pool)
+            .await?;
+
+        // Update playlist modified_at
+        let modified_at = Utc::now().to_rfc3339();
+        sqlx::query("UPDATE playlists SET modified_at = ? WHERE id = ?")
+            .bind(&modified_at)
+            .bind(&playlist_id_str)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Get all tracks in a playlist.
+    ///
+    /// For static playlists, returns the stored tracks in order.
+    /// For smart playlists, evaluates the query and returns matching tracks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_playlist_tracks(&self, playlist_id: &PlaylistId) -> DbResult<Vec<Track>> {
+        let id_str = playlist_id.0.to_string();
+
+        // First, get the playlist to check its type
+        let playlist = self
+            .get_playlist(playlist_id)
+            .await?
+            .ok_or_else(|| DbError::NotFound(format!("playlist {id_str}")))?;
+
+        match playlist.kind {
+            PlaylistKind::Static => {
+                // Get tracks in playlist order
+                let rows = sqlx::query(
+                    r"SELECT t.id, t.path, t.title, t.artist, t.album_artist, t.album_id, t.album_title,
+                             t.track_number, t.track_total, t.disc_number, t.disc_total, t.year,
+                             t.genres, t.duration_ms, t.bitrate, t.sample_rate, t.channels, t.format,
+                             t.musicbrainz_id, t.acoustid, t.added_at, t.modified_at, t.file_hash
+                      FROM tracks t
+                      JOIN playlist_tracks pt ON t.id = pt.track_id
+                      WHERE pt.playlist_id = ?
+                      ORDER BY pt.position",
+                )
+                .bind(&id_str)
+                .fetch_all(&self.pool)
+                .await?;
+
+                rows.iter().map(row_to_track).collect()
+            }
+            PlaylistKind::Smart => {
+                // Evaluate the query
+                self.evaluate_smart_playlist(&playlist).await
+            }
+        }
+    }
+
+    /// Evaluate a smart playlist query and return matching tracks.
+    async fn evaluate_smart_playlist(&self, playlist: &Playlist) -> DbResult<Vec<Track>> {
+        let query = playlist
+            .query
+            .as_ref()
+            .ok_or_else(|| DbError::InvalidData("Smart playlist has no query".to_string()))?;
+
+        // Build the SQL WHERE clause from the query
+        let (where_clause, bindings) = query_to_sql(query);
+
+        // Build the ORDER BY clause
+        let order_by = match playlist.sort {
+            PlaylistSort::Artist => "artist, album_title, disc_number, track_number",
+            PlaylistSort::Album => "album_title, disc_number, track_number",
+            PlaylistSort::Title => "title",
+            PlaylistSort::AddedDesc => "added_at DESC",
+            PlaylistSort::AddedAsc => "added_at ASC",
+            PlaylistSort::YearDesc => "year DESC, album_title, disc_number, track_number",
+            PlaylistSort::YearAsc => "year ASC, album_title, disc_number, track_number",
+            PlaylistSort::Random => "RANDOM()",
+        };
+
+        // Build LIMIT clause
+        let limit_clause = playlist
+            .limit
+            .as_ref()
+            .and_then(|l| l.max_tracks)
+            .map(|n| format!("LIMIT {n}"))
+            .unwrap_or_default();
+
+        let sql = format!(
+            r"SELECT id, path, title, artist, album_artist, album_id, album_title,
+                     track_number, track_total, disc_number, disc_total, year,
+                     genres, duration_ms, bitrate, sample_rate, channels, format,
+                     musicbrainz_id, acoustid, added_at, modified_at, file_hash
+              FROM tracks
+              WHERE {where_clause}
+              ORDER BY {order_by}
+              {limit_clause}"
+        );
+
+        // Build the query with bindings
+        let mut query = sqlx::query(&sql);
+        for binding in bindings {
+            query = query.bind(binding);
+        }
+
+        let rows = query.fetch_all(&self.pool).await?;
+
+        let mut tracks: Vec<Track> = rows.iter().map(row_to_track).collect::<DbResult<_>>()?;
+
+        // Apply max_duration_secs limit if set
+        if let Some(limit) = &playlist.limit
+            && let Some(max_secs) = limit.max_duration_secs
+        {
+            let max_ms = max_secs * 1000;
+            let mut total_ms = 0u64;
+            tracks.retain(|track| {
+                let track_ms = track.duration.as_millis() as u64;
+                if total_ms + track_ms <= max_ms {
+                    total_ms += track_ms;
+                    true
+                } else {
+                    false
+                }
+            });
+        }
+
+        Ok(tracks)
+    }
+}
+
+/// Convert a Query to a SQL WHERE clause.
+fn query_to_sql(query: &apollo_core::query::Query) -> (String, Vec<String>) {
+    use apollo_core::query::{Field, Query};
+
+    match query {
+        Query::All => ("1 = 1".to_string(), vec![]),
+        Query::Text(text) => {
+            let pattern = format!("%{text}%");
+            (
+                "(title LIKE ? OR artist LIKE ? OR album_title LIKE ?)".to_string(),
+                vec![pattern.clone(), pattern.clone(), pattern],
+            )
+        }
+        Query::Field { field, value } => {
+            let column = match field {
+                Field::Artist => "artist",
+                Field::AlbumArtist => "album_artist",
+                Field::Album => "album_title",
+                Field::Title => "title",
+                Field::Year => "year",
+                Field::Genre => "genres",
+                Field::Path => "path",
+            };
+
+            if *field == Field::Genre {
+                // Genres are stored as JSON array
+                let pattern = format!("%\"{value}\"%");
+                (format!("{column} LIKE ?"), vec![pattern])
+            } else if *field == Field::Path {
+                // Path uses prefix matching
+                let pattern = format!("{value}%");
+                (format!("{column} LIKE ?"), vec![pattern])
+            } else if *field == Field::Year {
+                // Year uses exact match
+                (format!("{column} = ?"), vec![value.clone()])
+            } else {
+                // Other fields use LIKE for partial matching
+                let pattern = format!("%{value}%");
+                (format!("{column} LIKE ?"), vec![pattern])
+            }
+        }
+        Query::YearRange { start, end } => (
+            "year BETWEEN ? AND ?".to_string(),
+            vec![start.to_string(), end.to_string()],
+        ),
+        Query::And(queries) => {
+            let mut clauses = Vec::new();
+            let mut all_bindings = Vec::new();
+            for q in queries {
+                let (clause, bindings) = query_to_sql(q);
+                clauses.push(format!("({clause})"));
+                all_bindings.extend(bindings);
+            }
+            (clauses.join(" AND "), all_bindings)
+        }
+        Query::Or(queries) => {
+            let mut clauses = Vec::new();
+            let mut all_bindings = Vec::new();
+            for q in queries {
+                let (clause, bindings) = query_to_sql(q);
+                clauses.push(format!("({clause})"));
+                all_bindings.extend(bindings);
+            }
+            (clauses.join(" OR "), all_bindings)
+        }
+        Query::Not(inner) => {
+            let (clause, bindings) = query_to_sql(inner);
+            (format!("NOT ({clause})"), bindings)
+        }
+    }
+}
+
+/// Convert a database row to a Playlist.
+fn row_to_playlist(row: &sqlx::sqlite::SqliteRow) -> DbResult<Playlist> {
+    let id_str: String = row.get("id");
+    let id = Uuid::parse_str(&id_str).map_err(|e| DbError::InvalidData(e.to_string()))?;
+
+    let kind_str: String = row.get("kind");
+    let kind = match kind_str.as_str() {
+        "static" => PlaylistKind::Static,
+        "smart" => PlaylistKind::Smart,
+        _ => {
+            return Err(DbError::InvalidData(format!(
+                "Unknown playlist kind: {kind_str}"
+            )));
+        }
+    };
+
+    let query_json: Option<String> = row.get("query");
+    let query = query_json
+        .map(|s| serde_json::from_str(&s))
+        .transpose()
+        .map_err(|e| DbError::Serialization(e.to_string()))?;
+
+    let sort_str: String = row.get("sort");
+    let sort = parse_playlist_sort(&sort_str);
+
+    let max_tracks: Option<i32> = row.get("max_tracks");
+    let max_duration_secs: Option<i64> = row.get("max_duration_secs");
+    let limit = if max_tracks.is_some() || max_duration_secs.is_some() {
+        Some(PlaylistLimit {
+            max_tracks: max_tracks.map(|n| n as u32),
+            max_duration_secs: max_duration_secs.map(|n| n as u64),
+        })
+    } else {
+        None
+    };
+
+    let created_at_str: String = row.get("created_at");
+    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+        .map_err(|e| DbError::InvalidData(e.to_string()))?
+        .with_timezone(&Utc);
+
+    let modified_at_str: String = row.get("modified_at");
+    let modified_at = DateTime::parse_from_rfc3339(&modified_at_str)
+        .map_err(|e| DbError::InvalidData(e.to_string()))?
+        .with_timezone(&Utc);
+
+    Ok(Playlist {
+        id: PlaylistId(id),
+        name: row.get("name"),
+        description: row.get("description"),
+        kind,
+        query,
+        sort,
+        limit,
+        track_ids: Vec::new(), // Loaded separately
+        created_at,
+        modified_at,
+    })
+}
+
+/// Parse playlist sort from string.
+fn parse_playlist_sort(s: &str) -> PlaylistSort {
+    match s.to_lowercase().as_str() {
+        "album" => PlaylistSort::Album,
+        "title" => PlaylistSort::Title,
+        "addeddesc" => PlaylistSort::AddedDesc,
+        "addedasc" => PlaylistSort::AddedAsc,
+        "yeardesc" => PlaylistSort::YearDesc,
+        "yearasc" => PlaylistSort::YearAsc,
+        "random" => PlaylistSort::Random,
+        // Default to Artist for "artist" and any unknown values
+        _ => PlaylistSort::Artist,
+    }
 }
 
 /// Convert a database row to a Track.
@@ -855,5 +1462,175 @@ mod tests {
 
         let albums = db.list_albums(10, 0).await.unwrap();
         assert_eq!(albums.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_static_playlist_crud() {
+        let db = SqliteLibrary::in_memory().await.unwrap();
+
+        // Create a static playlist
+        let playlist = Playlist::new_static("My Favorites").with_description("My favorite songs");
+
+        // Add the playlist
+        let id = db.add_playlist(&playlist).await.unwrap();
+        assert_eq!(id, playlist.id);
+
+        // Retrieve the playlist
+        let retrieved = db.get_playlist(&id).await.unwrap().unwrap();
+        assert_eq!(retrieved.name, "My Favorites");
+        assert_eq!(retrieved.description, Some("My favorite songs".to_string()));
+        assert!(retrieved.is_static());
+
+        // Update the playlist
+        let mut updated_playlist = retrieved;
+        updated_playlist.name = "Updated Favorites".to_string();
+        db.update_playlist(&updated_playlist).await.unwrap();
+
+        // Verify update
+        let retrieved = db.get_playlist(&id).await.unwrap().unwrap();
+        assert_eq!(retrieved.name, "Updated Favorites");
+
+        // Remove the playlist
+        db.remove_playlist(&id).await.unwrap();
+
+        // Verify removal
+        let retrieved = db.get_playlist(&id).await.unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_smart_playlist_crud() {
+        let db = SqliteLibrary::in_memory().await.unwrap();
+
+        // Create a smart playlist
+        let query = apollo_core::query::Query::parse("artist:Beatles").unwrap();
+        let playlist = Playlist::new_smart("Beatles Songs", query)
+            .with_sort(PlaylistSort::YearDesc)
+            .with_max_tracks(100);
+
+        // Add the playlist
+        let id = db.add_playlist(&playlist).await.unwrap();
+
+        // Retrieve the playlist
+        let retrieved = db.get_playlist(&id).await.unwrap().unwrap();
+        assert_eq!(retrieved.name, "Beatles Songs");
+        assert!(retrieved.is_smart());
+        assert_eq!(retrieved.sort, PlaylistSort::YearDesc);
+        assert!(retrieved.query.is_some());
+        assert!(retrieved.limit.is_some());
+        assert_eq!(retrieved.limit.unwrap().max_tracks, Some(100));
+    }
+
+    #[tokio::test]
+    async fn test_playlist_tracks() {
+        let db = SqliteLibrary::in_memory().await.unwrap();
+
+        // Create some tracks
+        let track1 = Track::new(
+            PathBuf::from("/music/track1.mp3"),
+            "Track 1".to_string(),
+            "Artist".to_string(),
+            Duration::from_secs(180),
+        );
+        let track2 = Track::new(
+            PathBuf::from("/music/track2.mp3"),
+            "Track 2".to_string(),
+            "Artist".to_string(),
+            Duration::from_secs(240),
+        );
+        db.add_track(&track1).await.unwrap();
+        db.add_track(&track2).await.unwrap();
+
+        // Create a static playlist
+        let playlist = Playlist::new_static("Test Playlist");
+        let playlist_id = db.add_playlist(&playlist).await.unwrap();
+
+        // Add tracks to playlist
+        db.add_track_to_playlist(&playlist_id, &track1.id)
+            .await
+            .unwrap();
+        db.add_track_to_playlist(&playlist_id, &track2.id)
+            .await
+            .unwrap();
+
+        // Get playlist tracks
+        let tracks = db.get_playlist_tracks(&playlist_id).await.unwrap();
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].title, "Track 1");
+        assert_eq!(tracks[1].title, "Track 2");
+
+        // Remove a track from playlist
+        db.remove_track_from_playlist(&playlist_id, &track1.id)
+            .await
+            .unwrap();
+        let tracks = db.get_playlist_tracks(&playlist_id).await.unwrap();
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].title, "Track 2");
+    }
+
+    #[tokio::test]
+    async fn test_smart_playlist_evaluation() {
+        let db = SqliteLibrary::in_memory().await.unwrap();
+
+        // Create tracks with different artists
+        for i in 1..=3 {
+            let mut track = Track::new(
+                PathBuf::from(format!("/music/beatles_{i}.mp3")),
+                format!("Song {i}"),
+                "Beatles".to_string(),
+                Duration::from_secs(180),
+            );
+            track.year = Some(1965 + i as i32);
+            db.add_track(&track).await.unwrap();
+        }
+
+        for i in 1..=2 {
+            let track = Track::new(
+                PathBuf::from(format!("/music/stones_{i}.mp3")),
+                format!("Stone Song {i}"),
+                "Rolling Stones".to_string(),
+                Duration::from_secs(200),
+            );
+            db.add_track(&track).await.unwrap();
+        }
+
+        // Create a smart playlist for Beatles
+        let query = apollo_core::query::Query::parse("artist:Beatles").unwrap();
+        let playlist = Playlist::new_smart("Beatles", query).with_sort(PlaylistSort::YearAsc);
+        let playlist_id = db.add_playlist(&playlist).await.unwrap();
+
+        // Evaluate the playlist
+        let tracks = db.get_playlist_tracks(&playlist_id).await.unwrap();
+        assert_eq!(tracks.len(), 3);
+        assert!(tracks.iter().all(|t| t.artist == "Beatles"));
+        // Should be sorted by year ascending
+        assert!(tracks[0].year <= tracks[1].year);
+        assert!(tracks[1].year <= tracks[2].year);
+    }
+
+    #[tokio::test]
+    async fn test_list_playlists() {
+        let db = SqliteLibrary::in_memory().await.unwrap();
+
+        // Create some playlists
+        db.add_playlist(&Playlist::new_static("Playlist A"))
+            .await
+            .unwrap();
+        db.add_playlist(&Playlist::new_static("Playlist B"))
+            .await
+            .unwrap();
+
+        let query = apollo_core::query::Query::All;
+        db.add_playlist(&Playlist::new_smart("All Songs", query))
+            .await
+            .unwrap();
+
+        // List all playlists
+        let playlists = db.list_playlists().await.unwrap();
+        assert_eq!(playlists.len(), 3);
+
+        // Count playlists
+        let count = db.count_playlists().await.unwrap();
+        assert_eq!(count, 3);
     }
 }
