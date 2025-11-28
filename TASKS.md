@@ -2,6 +2,10 @@
 
 ## Current Sprint: Foundation
 
+- [TODO] Validate we can import albums from FLAC/MP3 into a music library through the web app; album metadata should be looked up, tags set correctly, moved and renamed to the music library location, lyrics added, album art added, etc. make sure this works. 
+
+## Past stuff
+
 ### Priority 1: Project Setup
 - [DONE] Initialize Cargo workspace with all crates (2025-11-28)
 - [DONE] Set up CI/CD with GitHub Actions (2025-11-28)
