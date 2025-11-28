@@ -1,6 +1,8 @@
 //! API request handlers.
 
+use crate::import::{ImportOptions, ImportResult, ImportService};
 use crate::{error::ApiError, state::AppState};
+use apollo_core::Config;
 use apollo_core::metadata::{Album, AlbumId, Track, TrackId};
 use apollo_core::playlist::{Playlist, PlaylistId, PlaylistLimit, PlaylistSort};
 use apollo_core::query::Query as ApolloQuery;
@@ -10,6 +12,7 @@ use axum::{
     http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
@@ -860,6 +863,139 @@ fn parse_sort(s: &str) -> PlaylistSort {
         "random" => PlaylistSort::Random,
         _ => PlaylistSort::Artist,
     }
+}
+
+// ========================================================================
+// Import handlers
+// ========================================================================
+
+/// Request to import music from a directory.
+#[derive(Debug, Deserialize, ToSchema)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ImportRequest {
+    /// Path to the directory containing audio files.
+    #[schema(example = "/home/user/Music/NewAlbum")]
+    pub path: String,
+    /// Maximum recursion depth (null = unlimited).
+    pub max_depth: Option<usize>,
+    /// Follow symbolic links during scanning.
+    #[serde(default)]
+    pub follow_symlinks: bool,
+    /// Look up metadata from `MusicBrainz`.
+    #[serde(default)]
+    pub auto_tag: bool,
+    /// Minimum score for `MusicBrainz` matches (0-100).
+    #[serde(default = "default_min_score")]
+    pub min_match_score: u8,
+    /// Group tracks into albums and create album entries.
+    #[serde(default = "default_true")]
+    pub create_albums: bool,
+    /// Fetch album art from Cover Art Archive.
+    #[serde(default)]
+    pub fetch_album_art: bool,
+    /// Write updated metadata back to files.
+    #[serde(default)]
+    pub write_tags: bool,
+}
+
+const fn default_min_score() -> u8 {
+    80
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+/// Response from an import operation.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportResponse {
+    /// Number of tracks found in the directory.
+    #[schema(example = 12)]
+    pub tracks_found: usize,
+    /// Number of tracks successfully imported.
+    #[schema(example = 10)]
+    pub tracks_imported: usize,
+    /// Number of tracks skipped (duplicates).
+    #[schema(example = 2)]
+    pub tracks_skipped: usize,
+    /// Number of tracks that failed to import.
+    #[schema(example = 0)]
+    pub tracks_failed: usize,
+    /// Number of albums created.
+    #[schema(example = 1)]
+    pub albums_created: usize,
+    /// Errors encountered during import.
+    pub errors: Vec<String>,
+}
+
+impl From<ImportResult> for ImportResponse {
+    fn from(result: ImportResult) -> Self {
+        Self {
+            tracks_found: result.tracks_found,
+            tracks_imported: result.tracks_imported,
+            tracks_skipped: result.tracks_skipped,
+            tracks_failed: result.tracks_failed,
+            albums_created: result.albums_created,
+            errors: result.errors,
+        }
+    }
+}
+
+/// Import music from a directory.
+#[utoipa::path(
+    post,
+    path = "/api/import",
+    tag = "Import",
+    request_body = ImportRequest,
+    responses(
+        (status = 200, description = "Import completed", body = ImportResponse),
+        (status = 400, description = "Invalid request (path doesn't exist)", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn import_music(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ImportRequest>,
+) -> Result<Json<ImportResponse>, ApiError> {
+    let path = PathBuf::from(&req.path);
+
+    // Validate the path exists
+    if !path.exists() {
+        return Err(ApiError::BadRequest(format!(
+            "Path does not exist: {}",
+            req.path
+        )));
+    }
+
+    if !path.is_dir() {
+        return Err(ApiError::BadRequest(format!(
+            "Path is not a directory: {}",
+            req.path
+        )));
+    }
+
+    // Create import options
+    let options = ImportOptions {
+        source_path: path,
+        max_depth: req.max_depth,
+        follow_symlinks: req.follow_symlinks,
+        auto_tag: req.auto_tag,
+        min_match_score: req.min_match_score,
+        create_albums: req.create_albums,
+        fetch_album_art: req.fetch_album_art,
+        write_tags: req.write_tags,
+        compute_hashes: true,
+    };
+
+    // Create the import service
+    let config = Config::default();
+    let db = Arc::clone(&state.db);
+    let service = ImportService::new(db, &config);
+
+    // Run the import
+    let result = service.import(&options, None).await?;
+
+    Ok(Json(ImportResponse::from(result)))
 }
 
 #[cfg(test)]

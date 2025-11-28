@@ -8,6 +8,8 @@ description = "Web API and interface for Apollo"
 [dependencies]
 apollo-core = { workspace = true }
 apollo-db = { workspace = true }
+apollo-audio = { workspace = true }
+apollo-sources = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }

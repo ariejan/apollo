@@ -24,22 +24,28 @@
 //! - `DELETE /api/playlists/:id/tracks` - Remove tracks from a playlist
 //! - `GET /api/search` - Search tracks by query
 //! - `GET /api/stats` - Get library statistics
+//! - `POST /api/import` - Import music from a directory
 //! - `GET /swagger-ui` - Interactive API documentation
 
 mod error;
 mod handlers;
+pub mod import;
 mod state;
 
 pub use error::ApiError;
 pub use handlers::{
-    CreatePlaylistRequest, ErrorResponse, HealthResponse, PaginatedAlbumsResponse,
-    PaginatedTracksResponse, PlaylistResponse, PlaylistTracksRequest, StatsResponse,
-    UpdatePlaylistRequest,
+    CreatePlaylistRequest, ErrorResponse, HealthResponse, ImportRequest, ImportResponse,
+    PaginatedAlbumsResponse, PaginatedTracksResponse, PlaylistResponse, PlaylistTracksRequest,
+    StatsResponse, UpdatePlaylistRequest,
 };
+pub use import::{ImportOptions, ImportProgress, ImportResult, ImportService};
 pub use state::AppState;
 
 use apollo_core::metadata::{Album, AlbumId, Artist, AudioFormat, Track, TrackId};
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use std::path::Path;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -65,6 +71,7 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "Tracks", description = "Track management endpoints"),
         (name = "Albums", description = "Album management endpoints"),
         (name = "Playlists", description = "Playlist management endpoints"),
+        (name = "Import", description = "Music import endpoints"),
         (name = "Search", description = "Search endpoints"),
         (name = "Library", description = "Library statistics"),
         (name = "System", description = "System health endpoints")
@@ -85,7 +92,8 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::update_playlist,
         handlers::delete_playlist,
         handlers::add_playlist_tracks,
-        handlers::remove_playlist_tracks
+        handlers::remove_playlist_tracks,
+        handlers::import_music
     ),
     components(
         schemas(
@@ -103,7 +111,9 @@ use utoipa_swagger_ui::SwaggerUi;
             PlaylistResponse,
             CreatePlaylistRequest,
             UpdatePlaylistRequest,
-            PlaylistTracksRequest
+            PlaylistTracksRequest,
+            ImportRequest,
+            ImportResponse
         )
     )
 )]
@@ -170,6 +180,8 @@ pub fn create_router_with_static_files(
         .route("/api/search", get(handlers::search_tracks))
         // Stats endpoint
         .route("/api/stats", get(handlers::get_stats))
+        // Import endpoint
+        .route("/api/import", post(handlers::import_music))
         // Health check
         .route("/health", get(handlers::health_check))
         // OpenAPI documentation

@@ -2,7 +2,9 @@
 
 ## Current Sprint: Foundation
 
-- [TODO] Validate we can import albums from FLAC/MP3 into a music library through the web app; album metadata should be looked up, tags set correctly, moved and renamed to the music library location, lyrics added, album art added, etc. make sure this works. 
+- [IN PROGRESS] Validate we can import albums from FLAC/MP3 into a music library through the web app; album metadata should be looked up, tags set correctly, moved and renamed to the music library location, lyrics added, album art added, etc. make sure this works.
+  - Analysis shows the components exist but aren't wired together in the import pipeline
+  - Need to: wire MusicBrainz auto-tagging, album creation, album art fetching, web API import endpoint 
 
 ## Past stuff
 
