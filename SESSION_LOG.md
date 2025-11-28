@@ -33,6 +33,50 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Cover Art)
+
+### Completed
+- Implemented Cover Art Archive integration in apollo-sources crate:
+  - Created `coverart/types.rs` with comprehensive image types:
+    - `CoverImage` with URL, type, size, source, and comment
+    - `ImageSize` enum (Small/Medium/Large/Original)
+    - `CoverType` enum (Front/Back/Medium/Booklet/Other)
+    - `CoverArtArchiveResponse` and `CoverArtArchiveImage` for API responses
+    - `Thumbnails` for CAA thumbnail URLs (250px, 500px, 1200px)
+  - Created `coverart/client.rs` with `CoverArtClient`:
+    - Rate limiting (1.1 seconds between requests)
+    - `get_release_art()` - Get all cover art for a release
+    - `get_release_group_art()` - Get art for a release group
+    - `get_front_cover()` - Get front cover with size selection
+    - `get_cover_by_type()` - Get cover by type (front/back/etc.)
+    - `download_image()` - Download image to bytes
+    - `download_image_to_file()` - Download and save to file
+    - `front_cover_url()` / `back_cover_url()` - Direct URL generation
+    - `from_discogs_urls()` - Create CoverImage from Discogs data
+- All 117 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use Cover Art Archive (linked to MusicBrainz) as primary source
+- Support Discogs cover URLs from search results
+- Use markdown links for MusicBrainz references in docs (clippy doc_markdown)
+- Use derive(Default) with #[default] attribute instead of manual Default impl
+
+### Decisions Requested
+- None
+
+### Notes
+- Cover Art Archive provides high-quality images for MusicBrainz releases
+- Discogs provides thumbnails directly in search results
+- Images can be downloaded to bytes or saved directly to files
+
+---
+
 ## Session: 2025-11-28 (Discogs Integration)
 
 ### Completed

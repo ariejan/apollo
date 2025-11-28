@@ -12,6 +12,7 @@
 //! - [MusicBrainz](https://musicbrainz.org/): Community-maintained open music encyclopedia
 //! - [AcoustID](https://acoustid.org/): Audio fingerprint identification service
 //! - [Discogs](https://discogs.com/): Comprehensive music release database
+//! - [Cover Art Archive](https://coverartarchive.org/): Album cover art from [MusicBrainz](https://musicbrainz.org/)
 //!
 //! # Caching
 //!
@@ -67,6 +68,25 @@
 //! # }
 //! ```
 //!
+//! # Cover Art Example
+//!
+//! ```no_run
+//! use apollo_sources::coverart::{CoverArtClient, ImageSize};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = CoverArtClient::new("MyApp", "1.0")?;
+//!
+//! // Get cover art for a MusicBrainz release
+//! let images = client.get_release_art("76df3287-6cda-33eb-8e9a-044b5e15ffdd").await?;
+//! println!("Found {} images", images.len());
+//!
+//! // Get just the front cover
+//! let front = client.get_front_cover("76df3287-6cda-33eb-8e9a-044b5e15ffdd", ImageSize::Large).await?;
+//! println!("Front cover: {}", front.url);
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Cached Example
 //!
 //! ```no_run
@@ -98,6 +118,7 @@
 
 pub mod acoustid;
 pub mod cache;
+pub mod coverart;
 pub mod discogs;
 mod error;
 pub mod musicbrainz;

@@ -2,8 +2,8 @@
 
 use crate::discogs::types::{Master, Pagination, Release, SearchResponse, SearchResult};
 use crate::error::{SourceError, SourceResult};
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::Client;
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use std::fmt::Write;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;

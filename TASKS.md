@@ -63,7 +63,7 @@
 ### Priority 9
 - [DONE] Configuration file support (2025-11-28)
 - [DONE] Discogs integration (2025-11-28)
-- [TODO] Album art fetching
+- [DONE] Album art fetching (2025-11-28)
 - [TODO] Duplicate detection
 - [TODO] Smart playlists
 - [TODO] Web UI frontend
@@ -98,6 +98,7 @@
 - [2025-11-28] Add audio fingerprinting and AcoustID integration
 - [2025-11-28] Configuration file support with TOML, CLI config commands
 - [2025-11-28] Discogs API integration with search, release lookup, and barcode search
+- [2025-11-28] Cover Art Archive integration with image fetching, saving, and Discogs support
 
 ---
 
