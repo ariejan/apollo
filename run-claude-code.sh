@@ -19,7 +19,7 @@ set -euo pipefail
 
 # Configuration
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-MAX_SESSIONS="${MAX_SESSIONS:-3}"  # 0 = unlimited
+MAX_SESSIONS="${MAX_SESSIONS:-0}"  # 0 = unlimited
 SESSION_TIMEOUT="${SESSION_TIMEOUT:-1800}"  # 1 hour
 COOLDOWN="${COOLDOWN:-5}"  # 1 minute between sessions
 DRY_RUN="${DRY_RUN:-false}"
