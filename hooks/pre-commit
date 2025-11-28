@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# pre-commit hook for Apollo
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Check formatting
+echo "→ Checking formatting..."
+if ! cargo fmt --check; then
+    echo "❌ Code is not formatted. Run 'cargo fmt' to fix."
+    exit 1
+fi
+
+# Run clippy
+echo "→ Running clippy..."
+if ! cargo clippy --workspace -- -D warnings; then
+    echo "❌ Clippy found issues. Fix them before committing."
+    exit 1
+fi
+
+# Run tests
+echo "→ Running tests..."
+if ! cargo test --workspace --quiet; then
+    echo "❌ Tests failed. Fix them before committing."
+    exit 1
+fi
+
+echo "✓ All pre-commit checks passed!"

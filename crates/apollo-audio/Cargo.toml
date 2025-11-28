@@ -1,0 +1,18 @@
+[package]
+name = "apollo-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Audio file handling for Apollo music library manager"
+
+[dependencies]
+apollo-core = { workspace = true }
+lofty = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
