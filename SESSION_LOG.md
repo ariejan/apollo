@@ -33,6 +33,58 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Smart Playlists)
+
+### Completed
+- Implemented smart playlists feature end-to-end:
+  - Core types already existed in apollo-core/src/playlist.rs
+  - Database support already existed in apollo-db
+  - Added Display trait for Query and Field types
+- Added CLI commands for playlist management:
+  - `apollo playlist create` - Create static or smart playlists
+    - `--query` option for smart playlist query
+    - `--sort` option for playlist sort order
+    - `--max-tracks` for limiting smart playlist results
+    - `--description` for playlist description
+  - `apollo playlist list` - List all playlists
+  - `apollo playlist show <playlist>` - Show playlist details and tracks
+  - `apollo playlist add-track <playlist> <track_ids>` - Add tracks to static playlist
+  - `apollo playlist remove-track <playlist> <track_ids>` - Remove tracks from static playlist
+  - `apollo playlist delete <playlist>` - Delete a playlist
+- Added Web API endpoints for playlists:
+  - `GET /api/playlists` - List all playlists
+  - `GET /api/playlists/:id` - Get single playlist
+  - `GET /api/playlists/:id/tracks` - Get tracks in playlist
+  - `POST /api/playlists` - Create new playlist
+  - `PATCH /api/playlists/:id` - Update playlist
+  - `DELETE /api/playlists/:id` - Delete playlist
+  - `POST /api/playlists/:id/tracks` - Add tracks to static playlist
+  - `DELETE /api/playlists/:id/tracks` - Remove tracks from static playlist
+- Added playlist count to stats endpoint
+- OpenAPI documentation for all playlist endpoints
+- All 161 tests passing
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Support both static (manual) and smart (query-based) playlists
+- Smart playlists use the existing Query type for filtering
+- CLI allows identifying playlists by ID or name
+- Web API uses JSON request/response format
+
+### Decisions Requested
+- None
+
+### Notes
+- Smart playlists are now fully functional across CLI and Web API
+- Next suggested feature: Web UI frontend
+
+---
+
 ## Session: 2025-11-28 (Path Templates)
 
 ### Completed
