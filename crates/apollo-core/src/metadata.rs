@@ -260,6 +260,7 @@ mod duration_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn track_creation() {
@@ -290,5 +291,159 @@ mod tests {
         assert_eq!(track.title, deserialized.title);
         assert_eq!(track.artist, deserialized.artist);
         assert_eq!(track.duration, deserialized.duration);
+    }
+
+    /// Strategy for generating valid audio formats.
+    fn audio_format_strategy() -> impl Strategy<Value = AudioFormat> {
+        prop_oneof![
+            Just(AudioFormat::Mp3),
+            Just(AudioFormat::Flac),
+            Just(AudioFormat::Ogg),
+            Just(AudioFormat::Opus),
+            Just(AudioFormat::Aac),
+            Just(AudioFormat::Wav),
+            Just(AudioFormat::Aiff),
+            Just(AudioFormat::Unknown),
+        ]
+    }
+
+    /// Strategy for generating valid file paths (non-empty, valid characters).
+    fn path_strategy() -> impl Strategy<Value = PathBuf> {
+        "[a-zA-Z0-9_/.-]{1,100}".prop_map(PathBuf::from)
+    }
+
+    /// Strategy for generating non-empty strings (for titles, artists, etc.).
+    fn non_empty_string() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9 _-]{1,50}"
+    }
+
+    /// Strategy for generating duration in reasonable range (0 to 24 hours).
+    fn duration_strategy() -> impl Strategy<Value = Duration> {
+        (0u64..86_400_000u64).prop_map(Duration::from_millis)
+    }
+
+    proptest! {
+        /// Test that Track serialization roundtrips correctly for any valid track.
+        #[test]
+        fn track_serialization_roundtrip(
+            path in path_strategy(),
+            title in non_empty_string(),
+            artist in non_empty_string(),
+            duration in duration_strategy(),
+        ) {
+            let track = Track::new(path, title, artist, duration);
+
+            let json = serde_json::to_string(&track).expect("serialization should succeed");
+            let deserialized: Track = serde_json::from_str(&json).expect("deserialization should succeed");
+
+            prop_assert_eq!(&track.title, &deserialized.title);
+            prop_assert_eq!(&track.artist, &deserialized.artist);
+            prop_assert_eq!(track.duration, deserialized.duration);
+            prop_assert_eq!(track.path, deserialized.path);
+        }
+
+        /// Test that Album serialization roundtrips correctly for any valid album.
+        #[test]
+        fn album_serialization_roundtrip(
+            title in non_empty_string(),
+            artist in non_empty_string(),
+            year in proptest::option::of(1900i32..2100i32),
+            track_count in 0u32..1000u32,
+            disc_count in 1u32..20u32,
+        ) {
+            let mut album = Album::new(title.clone(), artist.clone());
+            album.year = year;
+            album.track_count = track_count;
+            album.disc_count = disc_count;
+
+            let json = serde_json::to_string(&album).expect("serialization should succeed");
+            let deserialized: Album = serde_json::from_str(&json).expect("deserialization should succeed");
+
+            prop_assert_eq!(&album.title, &deserialized.title);
+            prop_assert_eq!(&album.artist, &deserialized.artist);
+            prop_assert_eq!(album.year, deserialized.year);
+            prop_assert_eq!(album.track_count, deserialized.track_count);
+            prop_assert_eq!(album.disc_count, deserialized.disc_count);
+        }
+
+        /// Test that Artist serialization roundtrips correctly for any valid artist.
+        #[test]
+        fn artist_serialization_roundtrip(
+            name in non_empty_string(),
+            sort_name in proptest::option::of(non_empty_string()),
+            musicbrainz_id in proptest::option::of("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"),
+        ) {
+            let mut artist = Artist::new(name.clone());
+            artist.sort_name = sort_name.clone();
+            artist.musicbrainz_id = musicbrainz_id.clone();
+
+            let json = serde_json::to_string(&artist).expect("serialization should succeed");
+            let deserialized: Artist = serde_json::from_str(&json).expect("deserialization should succeed");
+
+            prop_assert_eq!(&artist.name, &deserialized.name);
+            prop_assert_eq!(&artist.sort_name, &deserialized.sort_name);
+            prop_assert_eq!(&artist.musicbrainz_id, &deserialized.musicbrainz_id);
+        }
+
+        /// Test that AudioFormat display is always valid (non-empty, consistent).
+        #[test]
+        fn audio_format_display_is_valid(format in audio_format_strategy()) {
+            let display = format.to_string();
+            prop_assert!(!display.is_empty(), "display should not be empty");
+        }
+
+        /// Test that TrackId generates unique IDs.
+        #[test]
+        fn track_id_uniqueness(_ in 0..100u32) {
+            let id1 = TrackId::new();
+            let id2 = TrackId::new();
+            prop_assert_ne!(id1, id2, "generated IDs should be unique");
+        }
+
+        /// Test that AlbumId generates unique IDs.
+        #[test]
+        fn album_id_uniqueness(_ in 0..100u32) {
+            let id1 = AlbumId::new();
+            let id2 = AlbumId::new();
+            prop_assert_ne!(id1, id2, "generated IDs should be unique");
+        }
+
+        /// Test that TrackId Display output is valid UUID format.
+        #[test]
+        fn track_id_display_is_uuid(_ in 0..100u32) {
+            let id = TrackId::new();
+            let display = id.to_string();
+            // UUID format: 8-4-4-4-12 hex characters
+            prop_assert!(display.len() == 36, "UUID should be 36 characters");
+            prop_assert!(display.chars().filter(|c| *c == '-').count() == 4, "UUID should have 4 dashes");
+        }
+
+        /// Test that AlbumId Display output is valid UUID format.
+        #[test]
+        fn album_id_display_is_uuid(_ in 0..100u32) {
+            let id = AlbumId::new();
+            let display = id.to_string();
+            prop_assert!(display.len() == 36, "UUID should be 36 characters");
+            prop_assert!(display.chars().filter(|c| *c == '-').count() == 4, "UUID should have 4 dashes");
+        }
+
+        /// Test duration serialization roundtrip preserves millisecond precision.
+        #[test]
+        fn duration_serialization_preserves_millis(millis in 0u64..u64::MAX / 1000) {
+            let duration = Duration::from_millis(millis);
+
+            // Create a track with this duration
+            let track = Track::new(
+                PathBuf::from("/test.mp3"),
+                "Test".to_string(),
+                "Artist".to_string(),
+                duration,
+            );
+
+            let json = serde_json::to_string(&track).expect("serialization should succeed");
+            let deserialized: Track = serde_json::from_str(&json).expect("deserialization should succeed");
+
+            prop_assert_eq!(track.duration.as_millis(), deserialized.duration.as_millis());
+        }
     }
 }

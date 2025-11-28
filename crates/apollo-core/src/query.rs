@@ -102,6 +102,7 @@ impl Query {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn parse_empty_query() {
@@ -134,5 +135,131 @@ mod tests {
                 end: 2023
             }
         ));
+    }
+
+    /// Strategy for generating valid field names.
+    fn field_name_strategy() -> impl Strategy<Value = &'static str> {
+        prop_oneof![
+            Just("artist"),
+            Just("albumartist"),
+            Just("album_artist"),
+            Just("album"),
+            Just("title"),
+            Just("year"),
+            Just("genre"),
+            Just("path"),
+        ]
+    }
+
+    /// Strategy for generating search values without colons and without leading/trailing spaces.
+    fn search_value_strategy() -> impl Strategy<Value = String> {
+        "[a-zA-Z0-9_/-]{1,30}"
+    }
+
+    proptest! {
+        /// Test that whitespace-only queries parse as All.
+        #[test]
+        fn whitespace_parses_as_all(s in "[ \t\n\r]*") {
+            let query = Query::parse(&s).expect("whitespace should parse");
+            prop_assert!(matches!(query, Query::All));
+        }
+
+        /// Test that text without colons parses as Text query.
+        #[test]
+        fn text_without_colon_parses_as_text(s in "[a-zA-Z0-9 _-]{1,50}") {
+            // Only test if there's no colon
+            if !s.contains(':') {
+                let query = Query::parse(&s).expect("text should parse");
+                match query {
+                    Query::Text(text) => prop_assert_eq!(text, s.trim()),
+                    Query::All => prop_assert!(s.trim().is_empty()),
+                    _ => prop_assert!(false, "expected Text or All"),
+                }
+            }
+        }
+
+        /// Test that valid field:value queries parse correctly.
+        #[test]
+        fn valid_field_value_parses(
+            field in field_name_strategy(),
+            value in search_value_strategy(),
+        ) {
+            let input = format!("{field}:{value}");
+            let query = Query::parse(&input).expect("valid field:value should parse");
+
+            match query {
+                Query::Field { value: parsed_value, .. } => {
+                    prop_assert_eq!(parsed_value, value);
+                }
+                Query::YearRange { .. } => {
+                    // This is valid for year field with ".." in value
+                    prop_assert!(field == "year" && value.contains(".."));
+                }
+                _ => prop_assert!(false, "expected Field or YearRange"),
+            }
+        }
+
+        /// Test that year range queries parse correctly.
+        #[test]
+        fn year_range_parses(
+            start in 1900i32..2100i32,
+            end in 1900i32..2100i32,
+        ) {
+            let input = format!("year:{start}..{end}");
+            let query = Query::parse(&input).expect("year range should parse");
+
+            match query {
+                Query::YearRange { start: s, end: e } => {
+                    prop_assert_eq!(s, start);
+                    prop_assert_eq!(e, end);
+                }
+                _ => prop_assert!(false, "expected YearRange"),
+            }
+        }
+
+        /// Test that invalid field names produce errors.
+        #[test]
+        fn invalid_field_produces_error(
+            field in "[a-z]{1,10}",
+            value in search_value_strategy(),
+        ) {
+            // Only test if the field is not a valid field name
+            let valid_fields = ["artist", "albumartist", "album_artist", "album", "title", "year", "genre", "path"];
+            if !valid_fields.contains(&field.as_str()) {
+                let input = format!("{field}:{value}");
+                let result = Query::parse(&input);
+                prop_assert!(result.is_err(), "invalid field should produce error");
+            }
+        }
+
+        /// Test that Query serialization roundtrips correctly.
+        #[test]
+        fn query_serialization_roundtrip(
+            field in field_name_strategy(),
+            value in "[a-zA-Z0-9]{1,20}",
+        ) {
+            let input = format!("{field}:{value}");
+            let query = Query::parse(&input).expect("should parse");
+
+            let json = serde_json::to_string(&query).expect("serialization should succeed");
+            let deserialized: Query = serde_json::from_str(&json).expect("deserialization should succeed");
+
+            // Compare serialized forms since Query doesn't implement PartialEq
+            let json2 = serde_json::to_string(&deserialized).expect("re-serialization should succeed");
+            prop_assert_eq!(json, json2);
+        }
+
+        /// Test that parsing is idempotent for the string representation.
+        #[test]
+        fn parsing_preserves_value(value in "[a-zA-Z0-9]{1,20}") {
+            let input = format!("artist:{value}");
+            let query = Query::parse(&input).expect("should parse");
+
+            if let Query::Field { value: parsed, .. } = query {
+                prop_assert_eq!(parsed, value);
+            } else {
+                prop_assert!(false, "expected Field");
+            }
+        }
     }
 }

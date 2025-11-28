@@ -14,7 +14,7 @@
 - [DONE] Define Artist metadata struct (2025-11-28)
 - [DONE] Implement Display traits (2025-11-28)
 - [DONE] Implement Serialize/Deserialize (2025-11-28)
-- [IN PROGRESS] Write property-based tests for types
+- [DONE] Write property-based tests for types (2025-11-28)
 
 ### Priority 3: Database Layer
 - [TODO] Design SQLite schema
@@ -85,6 +85,7 @@
 - [2025-11-28] Implement Display traits for core types
 - [2025-11-28] Implement Serialize/Deserialize for core types
 - [2025-11-28] Basic CLI structure with clap
+- [2025-11-28] Write property-based tests for core types and query parser
 
 ---
 
