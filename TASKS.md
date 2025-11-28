@@ -67,7 +67,7 @@
 - [DONE] Duplicate detection (2025-11-28)
 - [DONE] Path templates for file organization (2025-11-28)
 - [DONE] Smart playlists with CLI and Web API support (2025-11-28)
-- [TODO] Web UI frontend
+- [DONE] Web UI frontend (2025-11-28)
 
 ---
 
@@ -102,6 +102,7 @@
 - [2025-11-28] Duplicate detection (exact hash and similar metadata) with CLI command
 - [2025-11-28] Path templates for file organization with CLI organize command
 - [2025-11-28] Smart playlists (core types, database support, CLI commands, Web API endpoints)
+- [2025-11-28] Web UI frontend (Svelte 5, dashboard, tracks, albums, search, playlists)
 
 ---
 

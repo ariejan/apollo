@@ -33,6 +33,74 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Web UI Frontend)
+
+### Completed
+- Created complete Web UI frontend in Svelte 5 + Vite:
+  - Set up frontend project in `crates/apollo-web/frontend/`
+  - TypeScript API client with types matching REST API
+  - SPA routing with svelte-spa-router
+- Dashboard page:
+  - Library statistics display (tracks, albums, playlists)
+  - Server health status indicator
+  - Recent tracks and albums sections
+  - Empty library state with CLI hint
+- Tracks list page:
+  - Paginated list with track number, title, artist, album, duration
+  - Format badge (MP3, FLAC, etc.)
+  - Track count display
+- Albums list page:
+  - Grid layout with album cards
+  - Placeholder for missing cover art
+  - Album detail page with track listing
+  - Total duration calculation
+- Search page:
+  - Full-text search with query tips
+  - Supports FTS5 syntax (artist:, album:, etc.)
+  - Real-time search results
+- Playlists page:
+  - List of static and smart playlists
+  - Create playlist modal with form
+  - Smart playlist options (query, sort, max tracks)
+  - Delete playlist with confirmation
+  - Playlist detail page with tracks
+- UI Components:
+  - Sidebar navigation with stats badges
+  - Header component for page titles
+  - TrackRow, AlbumCard, Pagination components
+  - Loading spinner and empty state components
+- Backend integration:
+  - Added `--static-dir` flag to `apollo web` command
+  - Created `create_router_with_static_files()` function
+  - SPA fallback for client-side routing
+  - Added tower-http fs feature for ServeDir
+- All 161 tests passing
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use Svelte 5 with Vite (modern, fast, good DX)
+- Use svelte-spa-router for client-side routing
+- Dark theme (matches modern music apps)
+- Include dist folder in git for easy deployment
+- Use TypeScript for API client type safety
+- Add --static-dir flag rather than embedding assets
+
+### Decisions Requested
+- None
+
+### Notes
+- Web UI is feature-complete for the MVP scope
+- Frontend can be run standalone with `npm run dev` and API proxy
+- Built frontend is included in git for easy deployment
+- Usage: `apollo web --static-dir crates/apollo-web/frontend/dist`
+
+---
+
 ## Session: 2025-11-28 (Smart Playlists)
 
 ### Completed
