@@ -1,10 +1,10 @@
 //! [MusicBrainz](https://musicbrainz.org/) API response types.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
 /// A recording from the API.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recording {
     /// The MBID of the recording.
     pub id: String,
@@ -46,7 +46,7 @@ impl Recording {
 }
 
 /// A release (album/single/EP) from the API.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Release {
     /// The MBID of the release.
     pub id: String,
@@ -106,7 +106,7 @@ impl Release {
 }
 
 /// A release group (album, EP, single, etc.).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleaseGroup {
     /// The MBID of the release group.
     pub id: String,
@@ -122,7 +122,7 @@ pub struct ReleaseGroup {
 }
 
 /// A medium (disc/side) on a release.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Medium {
     /// Position of this medium in the release.
     #[serde(default)]
@@ -139,7 +139,7 @@ pub struct Medium {
 }
 
 /// A track on a medium.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Track {
     /// The MBID of this track.
     pub id: String,
@@ -161,7 +161,7 @@ pub struct Track {
 }
 
 /// Artist credit entry.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtistCredit {
     /// The artist.
     pub artist: Artist,
@@ -174,7 +174,7 @@ pub struct ArtistCredit {
 }
 
 /// An artist.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Artist {
     /// The MBID of the artist.
     pub id: String,
