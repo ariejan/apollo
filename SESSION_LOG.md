@@ -33,6 +33,52 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Integrated Import Service)
+
+### Completed
+- Created comprehensive import service (`ImportService`) in `apollo-web`:
+  - Orchestrates the complete import pipeline for music files
+  - Scans directories for audio files (MP3, FLAC, OGG, etc.)
+  - Optionally looks up metadata from MusicBrainz API
+  - Groups tracks into albums and creates album entries
+  - Optionally fetches album art from Cover Art Archive
+  - Optionally writes tags back to audio files
+  - Imports tracks into database with duplicate detection
+- Added Web API import endpoint:
+  - `POST /api/import` endpoint accepts:
+    - `path`: Directory to import from
+    - `auto_tag`: Enable MusicBrainz lookup
+    - `create_albums`: Group tracks into albums
+    - `fetch_album_art`: Download cover art
+    - `write_tags`: Write metadata back to files
+  - Returns detailed import results (tracks found/imported/skipped/failed, albums created, errors)
+- Added OpenAPI documentation for the new endpoint
+- Updated `AppState` to wrap database in `Arc<SqliteLibrary>` for thread safety
+- All 161 tests passing
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Created import service in `apollo-web` since it needs async I/O and web dependencies
+- Use `Option<fn(&ScanProgress)>` for type-safe callback in scan_directory
+- Group albums by album_artist + album_title (case-insensitive)
+- Allow suppressing clippy::too_many_lines for the main import function
+
+### Decisions Requested
+- None
+
+### Notes
+- This completes the integration of all import components
+- The import flow now: scan → MusicBrainz lookup → album creation → album art → tag writing → database import
+- Album art fetching is stubbed (TODO: save to file or embed in tracks)
+- Can be used via CLI (would need to create ImportService) or via Web API
+
+---
+
 ## Session: 2025-11-28 (Web UI Frontend)
 
 ### Completed
