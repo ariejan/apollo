@@ -33,6 +33,43 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (MusicBrainz integration)
+
+### Completed
+- Implemented MusicBrainz API client in apollo-sources crate:
+  - `MusicBrainzClient` with proper User-Agent configuration
+  - Built-in rate limiting (1 request/second)
+  - `search_recordings()`: Search for songs by title/artist
+  - `search_releases()`: Search for albums by title/artist
+  - `lookup_recording()`: Get recording by MBID
+  - `lookup_release()`: Get release by MBID
+  - `find_best_recording()`: Smart matching with score, album, duration
+- Complete API response types: Recording, Release, Artist, Track, etc.
+- Lucene query escaping for safe search queries
+- Added urlencoding dependency for URL encoding
+- Total 41 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use 1.1 second delay between requests (slightly over 1s for safety)
+- Return Option from find_best_recording when no good match found
+- Use checked_sub for Instant math to satisfy clippy
+
+### Decisions Requested
+- None
+
+### Notes
+- Client is functional but doesn't implement fingerprint search yet
+- Response caching would be beneficial to reduce API calls
+- Next priority: Web API or add `tag` command to CLI for MusicBrainz tagging
+
+---
+
 ## Session: 2025-11-28 (CLI commands)
 
 ### Completed

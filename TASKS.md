@@ -33,10 +33,10 @@
 - [DONE] File hashing for deduplication (2025-11-28)
 
 ### Priority 5: MusicBrainz Integration
-- [TODO] MusicBrainz API client
-- [TODO] Search by metadata
+- [DONE] MusicBrainz API client (2025-11-28)
+- [DONE] Search by metadata (2025-11-28)
 - [TODO] Search by fingerprint
-- [TODO] Rate limiting
+- [DONE] Rate limiting (2025-11-28)
 - [TODO] Caching responses
 
 ### Priority 6: CLI Foundation
@@ -89,6 +89,7 @@
 - [2025-11-28] Implement SQLite database layer with full CRUD and search
 - [2025-11-28] Implement audio file handling (MP3/FLAC/OGG reading, writing, scanning, hashing)
 - [2025-11-28] Implement CLI commands (init, import, list, query, stats)
+- [2025-11-28] Implement MusicBrainz API client with search and rate limiting
 
 ---
 
