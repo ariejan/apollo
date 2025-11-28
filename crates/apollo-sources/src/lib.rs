@@ -11,7 +11,7 @@
 //!
 //! - [MusicBrainz](https://musicbrainz.org/): Community-maintained open music encyclopedia
 //! - [AcoustID](https://acoustid.org/): Audio fingerprint identification service
-//! - Discogs: (planned)
+//! - [Discogs](https://discogs.com/): Comprehensive music release database
 //!
 //! # Caching
 //!
@@ -50,6 +50,23 @@
 //! # }
 //! ```
 //!
+//! # Discogs Example
+//!
+//! ```no_run
+//! use apollo_sources::discogs::DiscogsClient;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = DiscogsClient::new("MyApp", "1.0", "your-token")?;
+//!
+//! // Search for releases
+//! let results = client.search_releases("Abbey Road", Some("Beatles"), 5).await?;
+//! for result in &results {
+//!     println!("{} ({})", result.title, result.year.as_deref().unwrap_or_default());
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! # Cached Example
 //!
 //! ```no_run
@@ -81,6 +98,7 @@
 
 pub mod acoustid;
 pub mod cache;
+pub mod discogs;
 mod error;
 pub mod musicbrainz;
 

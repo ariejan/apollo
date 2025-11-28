@@ -33,6 +33,50 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Discogs Integration)
+
+### Completed
+- Implemented Discogs API integration in apollo-sources crate:
+  - Created `discogs/types.rs` with comprehensive response types:
+    - `Release`, `Master` for album data
+    - `Artist`, `Track`, `Label`, `Format` for detailed metadata
+    - `SearchResult`, `SearchResponse`, `Pagination` for search API
+    - `Community`, `Rating` for user data
+    - Duration parsing (MM:SS and H:MM:SS formats)
+  - Created `discogs/client.rs` with `DiscogsClient`:
+    - Rate limiting (60 requests/minute for authenticated users)
+    - `search_releases()` - Search releases by title/artist
+    - `search_masters()` - Search master releases
+    - `search()` - General query search
+    - `get_release()` - Look up release by Discogs ID
+    - `get_master()` - Look up master release by ID
+    - `search_by_barcode()` - Search by barcode (for physical media)
+    - `search_by_catalog_number()` - Search by catalog number
+    - `find_best_release()` - Find best match for metadata
+  - Added module and updated lib.rs with documentation examples
+- All 106 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use Discogs personal access token for authentication
+- Rate limit to 1.1 seconds between requests (conservative for 60/min limit)
+- Artist join phrases applied to current artist (before next artist)
+
+### Decisions Requested
+- None
+
+### Notes
+- Discogs provides richer metadata than MusicBrainz (genres, styles, labels, formats)
+- Barcode search is useful for matching physical media
+- Consider adding response caching similar to MusicBrainz
+
+---
+
 ## Session: 2025-11-28 (Configuration Support)
 
 ### Completed
