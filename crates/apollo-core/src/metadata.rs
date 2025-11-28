@@ -4,10 +4,12 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Unique identifier for a track.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[schema(example = "550e8400-e29b-41d4-a716-446655440000")]
 pub struct TrackId(pub Uuid);
 
 impl TrackId {
@@ -31,7 +33,8 @@ impl std::fmt::Display for TrackId {
 }
 
 /// Unique identifier for an album.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[schema(example = "660e8400-e29b-41d4-a716-446655440001")]
 pub struct AlbumId(pub Uuid);
 
 impl AlbumId {
@@ -55,16 +58,25 @@ impl std::fmt::Display for AlbumId {
 }
 
 /// Audio format/codec.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[schema(example = "mp3")]
 pub enum AudioFormat {
+    /// MPEG Audio Layer 3
     Mp3,
+    /// Free Lossless Audio Codec
     Flac,
+    /// Ogg Vorbis
     Ogg,
+    /// Opus audio codec
     Opus,
+    /// Advanced Audio Coding
     Aac,
+    /// Waveform Audio File Format
     Wav,
+    /// Audio Interchange File Format
     Aiff,
+    /// Unknown or unsupported format
     Unknown,
 }
 
@@ -84,54 +96,72 @@ impl std::fmt::Display for AudioFormat {
 }
 
 /// Represents a single audio track in the library.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Track {
     /// Unique identifier.
     pub id: TrackId,
     /// Path to the audio file.
+    #[schema(value_type = String, example = "/music/Artist/Album/01-Track.mp3")]
     pub path: PathBuf,
     /// Track title.
+    #[schema(example = "Bohemian Rhapsody")]
     pub title: String,
     /// Primary artist name.
+    #[schema(example = "Queen")]
     pub artist: String,
     /// Album artist (may differ from track artist).
+    #[schema(example = "Queen")]
     pub album_artist: Option<String>,
     /// Album this track belongs to.
     pub album_id: Option<AlbumId>,
     /// Album title (denormalized for convenience).
+    #[schema(example = "A Night at the Opera")]
     pub album_title: Option<String>,
     /// Track number within the album.
+    #[schema(example = 11)]
     pub track_number: Option<u32>,
     /// Total tracks on the album.
+    #[schema(example = 12)]
     pub track_total: Option<u32>,
     /// Disc number for multi-disc albums.
+    #[schema(example = 1)]
     pub disc_number: Option<u32>,
     /// Total discs in the album.
+    #[schema(example = 1)]
     pub disc_total: Option<u32>,
     /// Release year.
+    #[schema(example = 1975)]
     pub year: Option<i32>,
     /// Genre tags.
+    #[schema(example = json!(["Rock", "Progressive Rock"]))]
     pub genres: Vec<String>,
-    /// Track duration.
+    /// Track duration in milliseconds.
     #[serde(with = "duration_serde")]
+    #[schema(value_type = u64, example = 354_000)]
     pub duration: Duration,
     /// Bitrate in kbps (if applicable).
+    #[schema(example = 320)]
     pub bitrate: Option<u32>,
     /// Sample rate in Hz.
+    #[schema(example = 44100)]
     pub sample_rate: Option<u32>,
     /// Number of audio channels.
+    #[schema(example = 2)]
     pub channels: Option<u8>,
     /// Audio format.
     pub format: AudioFormat,
     /// [MusicBrainz](https://musicbrainz.org/) recording ID.
+    #[schema(example = "e6950e7d-c8fb-43a1-b0c6-f4d6f7b36cd1")]
     pub musicbrainz_id: Option<String>,
     /// [AcoustID](https://acoustid.org/) fingerprint identifier.
+    #[schema(example = "a1b2c3d4-e5f6-7890-abcd-ef1234567890")]
     pub acoustid: Option<String>,
     /// When the track was added to the library.
     pub added_at: DateTime<Utc>,
     /// When the track metadata was last modified.
     pub modified_at: DateTime<Utc>,
     /// SHA-256 hash of the file contents.
+    #[schema(example = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")]
     pub file_hash: String,
 }
 
@@ -169,23 +199,30 @@ impl Track {
 }
 
 /// Represents an album in the library.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Album {
     /// Unique identifier.
     pub id: AlbumId,
     /// Album title.
+    #[schema(example = "A Night at the Opera")]
     pub title: String,
     /// Album artist.
+    #[schema(example = "Queen")]
     pub artist: String,
     /// Release year.
+    #[schema(example = 1975)]
     pub year: Option<i32>,
     /// Genre tags.
+    #[schema(example = json!(["Rock", "Progressive Rock"]))]
     pub genres: Vec<String>,
     /// Number of tracks.
+    #[schema(example = 12)]
     pub track_count: u32,
     /// Number of discs.
+    #[schema(example = 1)]
     pub disc_count: u32,
     /// [MusicBrainz](https://musicbrainz.org/) release ID.
+    #[schema(example = "6defd963-fe91-4550-b18e-82c685603c2b")]
     pub musicbrainz_id: Option<String>,
     /// When the album was added to the library.
     pub added_at: DateTime<Utc>,
@@ -214,13 +251,16 @@ impl Album {
 }
 
 /// Represents an artist in the library.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Artist {
     /// Artist name (primary identifier).
+    #[schema(example = "Queen")]
     pub name: String,
     /// Sort name (e.g., "Beatles, The").
+    #[schema(example = "Queen")]
     pub sort_name: Option<String>,
     /// [MusicBrainz](https://musicbrainz.org/) artist ID.
+    #[schema(example = "0383dadf-2a4e-4d10-a46a-e9e041da8eb3")]
     pub musicbrainz_id: Option<String>,
 }
 

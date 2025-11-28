@@ -1,13 +1,14 @@
 //! API request handlers.
 
 use crate::{error::ApiError, state::AppState};
-use apollo_core::metadata::{AlbumId, TrackId};
+use apollo_core::metadata::{Album, AlbumId, Track, TrackId};
 use axum::{
     Json,
     extract::{Path, Query, State},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 /// Default page size for list operations.
@@ -16,13 +17,15 @@ const DEFAULT_LIMIT: u32 = 50;
 const MAX_LIMIT: u32 = 500;
 
 /// Pagination query parameters.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct PaginationQuery {
-    /// Maximum number of items to return.
+    /// Maximum number of items to return (default: 50, max: 500).
     #[serde(default = "default_limit")]
+    #[param(default = 50, minimum = 1, maximum = 500)]
     pub limit: u32,
     /// Number of items to skip.
     #[serde(default)]
+    #[param(default = 0, minimum = 0)]
     pub offset: u32,
 }
 
@@ -31,44 +34,87 @@ const fn default_limit() -> u32 {
 }
 
 /// Search query parameters.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct SearchQuery {
-    /// Search query string.
+    /// Search query string. Supports simple text or FTS5 syntax.
+    #[param(example = "bohemian rhapsody")]
     pub q: String,
 }
 
-/// Paginated response wrapper.
-#[derive(Debug, Serialize)]
-pub struct PaginatedResponse<T> {
+/// Paginated response wrapper for tracks.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PaginatedTracksResponse {
     /// Items in this page.
-    pub items: Vec<T>,
+    pub items: Vec<Track>,
     /// Total number of items.
+    #[schema(example = 100)]
     pub total: u64,
     /// Current limit.
+    #[schema(example = 50)]
     pub limit: u32,
     /// Current offset.
+    #[schema(example = 0)]
+    pub offset: u32,
+}
+
+/// Paginated response wrapper for albums.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PaginatedAlbumsResponse {
+    /// Items in this page.
+    pub items: Vec<Album>,
+    /// Total number of items.
+    #[schema(example = 25)]
+    pub total: u64,
+    /// Current limit.
+    #[schema(example = 50)]
+    pub limit: u32,
+    /// Current offset.
+    #[schema(example = 0)]
     pub offset: u32,
 }
 
 /// Library statistics response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct StatsResponse {
     /// Total number of tracks.
+    #[schema(example = 1234)]
     pub track_count: u64,
     /// Total number of albums.
+    #[schema(example = 87)]
     pub album_count: u64,
 }
 
 /// Health check response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HealthResponse {
     /// Health status.
+    #[schema(example = "healthy")]
     pub status: String,
     /// Service version.
+    #[schema(example = "0.1.0")]
     pub version: String,
 }
 
+/// Error response.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    /// Error type.
+    #[schema(example = "not_found")]
+    pub error: String,
+    /// Error message.
+    #[schema(example = "Track not found: 550e8400-e29b-41d4-a716-446655440000")]
+    pub message: String,
+}
+
 /// Health check endpoint.
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "System",
+    responses(
+        (status = 200, description = "Service is healthy", body = HealthResponse)
+    )
+)]
 pub async fn health_check() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
@@ -77,6 +123,15 @@ pub async fn health_check() -> Json<HealthResponse> {
 }
 
 /// Get library statistics.
+#[utoipa::path(
+    get,
+    path = "/api/stats",
+    tag = "Library",
+    responses(
+        (status = 200, description = "Library statistics", body = StatsResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_stats(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<StatsResponse>, ApiError> {
@@ -90,15 +145,25 @@ pub async fn get_stats(
 }
 
 /// List all tracks with pagination.
+#[utoipa::path(
+    get,
+    path = "/api/tracks",
+    tag = "Tracks",
+    params(PaginationQuery),
+    responses(
+        (status = 200, description = "List of tracks", body = PaginatedTracksResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn list_tracks(
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<PaginatedResponse<apollo_core::metadata::Track>>, ApiError> {
+) -> Result<Json<PaginatedTracksResponse>, ApiError> {
     let limit = query.limit.min(MAX_LIMIT);
     let tracks = state.db.list_tracks(limit, query.offset).await?;
     let total = state.db.count_tracks().await?;
 
-    Ok(Json(PaginatedResponse {
+    Ok(Json(PaginatedTracksResponse {
         items: tracks,
         total,
         limit,
@@ -107,10 +172,24 @@ pub async fn list_tracks(
 }
 
 /// Get a single track by ID.
+#[utoipa::path(
+    get,
+    path = "/api/tracks/{id}",
+    tag = "Tracks",
+    params(
+        ("id" = String, Path, description = "Track UUID", example = "550e8400-e29b-41d4-a716-446655440000")
+    ),
+    responses(
+        (status = 200, description = "Track found", body = Track),
+        (status = 400, description = "Invalid track ID", body = ErrorResponse),
+        (status = 404, description = "Track not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_track(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<apollo_core::metadata::Track>, ApiError> {
+) -> Result<Json<Track>, ApiError> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ApiError::BadRequest(format!("Invalid track ID: {id}")))?;
     let track_id = TrackId(uuid);
@@ -125,15 +204,25 @@ pub async fn get_track(
 }
 
 /// List all albums with pagination.
+#[utoipa::path(
+    get,
+    path = "/api/albums",
+    tag = "Albums",
+    params(PaginationQuery),
+    responses(
+        (status = 200, description = "List of albums", body = PaginatedAlbumsResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn list_albums(
     State(state): State<Arc<AppState>>,
     Query(query): Query<PaginationQuery>,
-) -> Result<Json<PaginatedResponse<apollo_core::metadata::Album>>, ApiError> {
+) -> Result<Json<PaginatedAlbumsResponse>, ApiError> {
     let limit = query.limit.min(MAX_LIMIT);
     let albums = state.db.list_albums(limit, query.offset).await?;
     let total = state.db.count_albums().await?;
 
-    Ok(Json(PaginatedResponse {
+    Ok(Json(PaginatedAlbumsResponse {
         items: albums,
         total,
         limit,
@@ -142,10 +231,24 @@ pub async fn list_albums(
 }
 
 /// Get a single album by ID.
+#[utoipa::path(
+    get,
+    path = "/api/albums/{id}",
+    tag = "Albums",
+    params(
+        ("id" = String, Path, description = "Album UUID", example = "660e8400-e29b-41d4-a716-446655440001")
+    ),
+    responses(
+        (status = 200, description = "Album found", body = Album),
+        (status = 400, description = "Invalid album ID", body = ErrorResponse),
+        (status = 404, description = "Album not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_album(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<apollo_core::metadata::Album>, ApiError> {
+) -> Result<Json<Album>, ApiError> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ApiError::BadRequest(format!("Invalid album ID: {id}")))?;
     let album_id = AlbumId(uuid);
@@ -160,10 +263,24 @@ pub async fn get_album(
 }
 
 /// Get all tracks in an album.
+#[utoipa::path(
+    get,
+    path = "/api/albums/{id}/tracks",
+    tag = "Albums",
+    params(
+        ("id" = String, Path, description = "Album UUID", example = "660e8400-e29b-41d4-a716-446655440001")
+    ),
+    responses(
+        (status = 200, description = "List of tracks in the album", body = Vec<Track>),
+        (status = 400, description = "Invalid album ID", body = ErrorResponse),
+        (status = 404, description = "Album not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_album_tracks(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<Vec<apollo_core::metadata::Track>>, ApiError> {
+) -> Result<Json<Vec<Track>>, ApiError> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| ApiError::BadRequest(format!("Invalid album ID: {id}")))?;
     let album_id = AlbumId(uuid);
@@ -180,10 +297,21 @@ pub async fn get_album_tracks(
 }
 
 /// Search tracks by query.
+#[utoipa::path(
+    get,
+    path = "/api/search",
+    tag = "Search",
+    params(SearchQuery),
+    responses(
+        (status = 200, description = "Search results", body = Vec<Track>),
+        (status = 400, description = "Empty search query", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn search_tracks(
     State(state): State<Arc<AppState>>,
     Query(query): Query<SearchQuery>,
-) -> Result<Json<Vec<apollo_core::metadata::Track>>, ApiError> {
+) -> Result<Json<Vec<Track>>, ApiError> {
     if query.q.is_empty() {
         return Err(ApiError::BadRequest(
             "Search query cannot be empty".to_string(),

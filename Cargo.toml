@@ -44,6 +44,10 @@ axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
+# OpenAPI documentation
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "8", features = ["axum", "reqwest"] }
+
 # Lua scripting (vendored to avoid pkg-config dependency)
 mlua = { version = "0.9", features = ["lua54", "async", "serialize", "vendored"] }
 

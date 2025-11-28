@@ -1,3 +1,6 @@
+// Clippy lint exception for utoipa derive macro
+#![allow(clippy::needless_for_each)]
+
 //! # Apollo Web
 //!
 //! REST API and web interface for Apollo.
@@ -13,18 +16,73 @@
 //! - `GET /api/albums/:id/tracks` - Get all tracks in an album
 //! - `GET /api/search` - Search tracks by query
 //! - `GET /api/stats` - Get library statistics
+//! - `GET /swagger-ui` - Interactive API documentation
 
 mod error;
 mod handlers;
 mod state;
 
 pub use error::ApiError;
+pub use handlers::{
+    ErrorResponse, HealthResponse, PaginatedAlbumsResponse, PaginatedTracksResponse, StatsResponse,
+};
 pub use state::AppState;
 
+use apollo_core::metadata::{Album, AlbumId, Artist, AudioFormat, Track, TrackId};
 use axum::{Router, routing::get};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+/// [OpenAPI](https://www.openapis.org/) documentation for the Apollo API.
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "Apollo API",
+        description = "REST API for the Apollo music library manager",
+        version = "0.1.0",
+        license(name = "MIT OR Apache-2.0"),
+        contact(name = "Apollo Team")
+    ),
+    servers(
+        (url = "/", description = "Local server")
+    ),
+    tags(
+        (name = "Tracks", description = "Track management endpoints"),
+        (name = "Albums", description = "Album management endpoints"),
+        (name = "Search", description = "Search endpoints"),
+        (name = "Library", description = "Library statistics"),
+        (name = "System", description = "System health endpoints")
+    ),
+    paths(
+        handlers::health_check,
+        handlers::get_stats,
+        handlers::list_tracks,
+        handlers::get_track,
+        handlers::list_albums,
+        handlers::get_album,
+        handlers::get_album_tracks,
+        handlers::search_tracks
+    ),
+    components(
+        schemas(
+            Track,
+            Album,
+            Artist,
+            TrackId,
+            AlbumId,
+            AudioFormat,
+            HealthResponse,
+            StatsResponse,
+            ErrorResponse,
+            PaginatedTracksResponse,
+            PaginatedAlbumsResponse
+        )
+    )
+)]
+pub struct ApiDoc;
 
 /// Create the API router with all endpoints.
 ///
@@ -55,6 +113,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/stats", get(handlers::get_stats))
         // Health check
         .route("/health", get(handlers::health_check))
+        // OpenAPI documentation
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Add shared state
         .with_state(state)
         // Add middleware
