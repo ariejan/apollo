@@ -2,9 +2,12 @@
 
 use crate::{error::ApiError, state::AppState};
 use apollo_core::metadata::{Album, AlbumId, Track, TrackId};
+use apollo_core::playlist::{Playlist, PlaylistId, PlaylistLimit, PlaylistSort};
+use apollo_core::query::Query as ApolloQuery;
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -82,6 +85,112 @@ pub struct StatsResponse {
     /// Total number of albums.
     #[schema(example = 87)]
     pub album_count: u64,
+    /// Total number of playlists.
+    #[schema(example = 5)]
+    pub playlist_count: u64,
+}
+
+/// API representation of a playlist.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PlaylistResponse {
+    /// Unique identifier.
+    #[schema(example = "770e8400-e29b-41d4-a716-446655440002")]
+    pub id: String,
+    /// Playlist name.
+    #[schema(example = "My Favorites")]
+    pub name: String,
+    /// Optional description.
+    #[schema(example = "My favorite songs")]
+    pub description: Option<String>,
+    /// Playlist type (static or smart).
+    #[schema(example = "static")]
+    pub kind: String,
+    /// Query string for smart playlists.
+    #[schema(example = "artist:Beatles")]
+    pub query: Option<String>,
+    /// Sort order.
+    #[schema(example = "artist")]
+    pub sort: String,
+    /// Maximum number of tracks (smart playlists only).
+    pub max_tracks: Option<u32>,
+    /// Maximum duration in seconds (smart playlists only).
+    pub max_duration_secs: Option<u64>,
+    /// Number of tracks in the playlist.
+    #[schema(example = 25)]
+    pub track_count: usize,
+    /// When the playlist was created.
+    pub created_at: String,
+    /// When the playlist was last modified.
+    pub modified_at: String,
+}
+
+impl PlaylistResponse {
+    fn from_playlist(playlist: &Playlist, track_count: usize) -> Self {
+        Self {
+            id: playlist.id.0.to_string(),
+            name: playlist.name.clone(),
+            description: playlist.description.clone(),
+            kind: format!("{}", playlist.kind),
+            query: playlist.query.as_ref().map(|q| format!("{q}")),
+            sort: format!("{}", playlist.sort),
+            max_tracks: playlist.limit.as_ref().and_then(|l| l.max_tracks),
+            max_duration_secs: playlist.limit.as_ref().and_then(|l| l.max_duration_secs),
+            track_count,
+            created_at: playlist.created_at.to_rfc3339(),
+            modified_at: playlist.modified_at.to_rfc3339(),
+        }
+    }
+}
+
+/// Request to create a new playlist.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreatePlaylistRequest {
+    /// Playlist name.
+    #[schema(example = "My Favorites")]
+    pub name: String,
+    /// Optional description.
+    #[schema(example = "My favorite songs")]
+    pub description: Option<String>,
+    /// Query string for smart playlists. If provided, creates a smart playlist.
+    #[schema(example = "artist:Beatles")]
+    pub query: Option<String>,
+    /// Sort order (one of: artist, album, title).
+    #[schema(example = "artist")]
+    #[serde(default)]
+    pub sort: Option<String>,
+    /// Maximum number of tracks (smart playlists only).
+    pub max_tracks: Option<u32>,
+    /// Maximum duration in seconds (smart playlists only).
+    pub max_duration_secs: Option<u64>,
+}
+
+/// Request to update a playlist.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdatePlaylistRequest {
+    /// New playlist name.
+    #[schema(example = "Updated Favorites")]
+    pub name: Option<String>,
+    /// New description.
+    #[schema(example = "Updated description")]
+    pub description: Option<String>,
+    /// New query string (smart playlists only).
+    #[schema(example = "artist:Rolling Stones")]
+    pub query: Option<String>,
+    /// New sort order.
+    #[schema(example = "year_desc")]
+    pub sort: Option<String>,
+    /// New maximum tracks.
+    pub max_tracks: Option<u32>,
+    /// New maximum duration.
+    pub max_duration_secs: Option<u64>,
+}
+
+/// Request to add or remove tracks from a playlist.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PlaylistTracksRequest {
+    /// Track IDs to add or remove.
+    #[schema(example = json!(["550e8400-e29b-41d4-a716-446655440000"]))]
+    pub track_ids: Vec<String>,
 }
 
 /// Health check response.
@@ -137,10 +246,12 @@ pub async fn get_stats(
 ) -> Result<Json<StatsResponse>, ApiError> {
     let track_count = state.db.count_tracks().await?;
     let album_count = state.db.count_albums().await?;
+    let playlist_count = state.db.count_playlists().await?;
 
     Ok(Json(StatsResponse {
         track_count,
         album_count,
+        playlist_count,
     }))
 }
 
@@ -334,6 +445,421 @@ pub async fn search_tracks(
 
     let tracks = state.db.search_tracks(&fts_query).await?;
     Ok(Json(tracks))
+}
+
+// ========================================================================
+// Playlist handlers
+// ========================================================================
+
+/// List all playlists.
+#[utoipa::path(
+    get,
+    path = "/api/playlists",
+    tag = "Playlists",
+    responses(
+        (status = 200, description = "List of playlists", body = Vec<PlaylistResponse>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn list_playlists(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<PlaylistResponse>>, ApiError> {
+    let playlists = state.db.list_playlists().await?;
+
+    let responses: Vec<PlaylistResponse> = playlists
+        .iter()
+        .map(|p| {
+            let track_count = if p.is_static() {
+                p.track_ids.len()
+            } else {
+                0 // Smart playlist track count requires evaluation
+            };
+            PlaylistResponse::from_playlist(p, track_count)
+        })
+        .collect();
+
+    Ok(Json(responses))
+}
+
+/// Get a single playlist by ID.
+#[utoipa::path(
+    get,
+    path = "/api/playlists/{id}",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    responses(
+        (status = 200, description = "Playlist found", body = PlaylistResponse),
+        (status = 400, description = "Invalid playlist ID", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn get_playlist(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    let playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    let track_count = if playlist.is_static() {
+        playlist.track_ids.len()
+    } else {
+        state.db.get_playlist_tracks(&playlist_id).await?.len()
+    };
+
+    Ok(Json(PlaylistResponse::from_playlist(
+        &playlist,
+        track_count,
+    )))
+}
+
+/// Get all tracks in a playlist.
+#[utoipa::path(
+    get,
+    path = "/api/playlists/{id}/tracks",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    responses(
+        (status = 200, description = "List of tracks in the playlist", body = Vec<Track>),
+        (status = 400, description = "Invalid playlist ID", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn get_playlist_tracks(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<Track>>, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    // Verify playlist exists
+    state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    let tracks = state.db.get_playlist_tracks(&playlist_id).await?;
+    Ok(Json(tracks))
+}
+
+/// Create a new playlist.
+#[utoipa::path(
+    post,
+    path = "/api/playlists",
+    tag = "Playlists",
+    request_body = CreatePlaylistRequest,
+    responses(
+        (status = 201, description = "Playlist created", body = PlaylistResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn create_playlist(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreatePlaylistRequest>,
+) -> Result<(StatusCode, Json<PlaylistResponse>), ApiError> {
+    let playlist = if let Some(query_str) = req.query {
+        // Parse the query for smart playlist
+        let parsed_query = ApolloQuery::parse(&query_str)
+            .map_err(|e| ApiError::BadRequest(format!("Invalid query: {e}")))?;
+
+        let mut pl = Playlist::new_smart(&req.name, parsed_query);
+
+        if let Some(desc) = req.description {
+            pl = pl.with_description(desc);
+        }
+
+        if let Some(sort_str) = req.sort {
+            pl = pl.with_sort(parse_sort(&sort_str));
+        }
+
+        if req.max_tracks.is_some() || req.max_duration_secs.is_some() {
+            pl = pl.with_limit(PlaylistLimit {
+                max_tracks: req.max_tracks,
+                max_duration_secs: req.max_duration_secs,
+            });
+        }
+
+        pl
+    } else {
+        let mut pl = Playlist::new_static(&req.name);
+
+        if let Some(desc) = req.description {
+            pl = pl.with_description(desc);
+        }
+
+        pl
+    };
+
+    state.db.add_playlist(&playlist).await?;
+
+    let response = PlaylistResponse::from_playlist(&playlist, 0);
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+/// Update a playlist.
+#[utoipa::path(
+    patch,
+    path = "/api/playlists/{id}",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    request_body = UpdatePlaylistRequest,
+    responses(
+        (status = 200, description = "Playlist updated", body = PlaylistResponse),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn update_playlist(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdatePlaylistRequest>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    let mut playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    if let Some(name) = req.name {
+        playlist.name = name;
+    }
+
+    if let Some(desc) = req.description {
+        playlist.description = Some(desc);
+    }
+
+    if let Some(query_str) = req.query {
+        if playlist.is_smart() {
+            let parsed_query = ApolloQuery::parse(&query_str)
+                .map_err(|e| ApiError::BadRequest(format!("Invalid query: {e}")))?;
+            playlist.query = Some(parsed_query);
+        } else {
+            return Err(ApiError::BadRequest(
+                "Cannot set query on static playlist".to_string(),
+            ));
+        }
+    }
+
+    if let Some(sort_str) = req.sort {
+        playlist.sort = parse_sort(&sort_str);
+    }
+
+    if req.max_tracks.is_some() || req.max_duration_secs.is_some() {
+        let limit = playlist.limit.get_or_insert_with(PlaylistLimit::default);
+        if let Some(max) = req.max_tracks {
+            limit.max_tracks = Some(max);
+        }
+        if let Some(max) = req.max_duration_secs {
+            limit.max_duration_secs = Some(max);
+        }
+    }
+
+    state.db.update_playlist(&playlist).await?;
+
+    let track_count = if playlist.is_static() {
+        playlist.track_ids.len()
+    } else {
+        state.db.get_playlist_tracks(&playlist_id).await?.len()
+    };
+
+    Ok(Json(PlaylistResponse::from_playlist(
+        &playlist,
+        track_count,
+    )))
+}
+
+/// Delete a playlist.
+#[utoipa::path(
+    delete,
+    path = "/api/playlists/{id}",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    responses(
+        (status = 204, description = "Playlist deleted"),
+        (status = 400, description = "Invalid playlist ID", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn delete_playlist(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    state.db.remove_playlist(&playlist_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Add tracks to a static playlist.
+#[utoipa::path(
+    post,
+    path = "/api/playlists/{id}/tracks",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    request_body = PlaylistTracksRequest,
+    responses(
+        (status = 200, description = "Tracks added", body = PlaylistResponse),
+        (status = 400, description = "Invalid request or smart playlist", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn add_playlist_tracks(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<PlaylistTracksRequest>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    let playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    if playlist.is_smart() {
+        return Err(ApiError::BadRequest(
+            "Cannot add tracks to smart playlist".to_string(),
+        ));
+    }
+
+    for track_id_str in &req.track_ids {
+        let track_uuid = Uuid::parse_str(track_id_str)
+            .map_err(|_| ApiError::BadRequest(format!("Invalid track ID: {track_id_str}")))?;
+        let track_id = TrackId(track_uuid);
+
+        // Verify track exists
+        state
+            .db
+            .get_track(&track_id)
+            .await?
+            .ok_or_else(|| ApiError::NotFound(format!("Track not found: {track_id_str}")))?;
+
+        state
+            .db
+            .add_track_to_playlist(&playlist_id, &track_id)
+            .await?;
+    }
+
+    // Reload playlist to get updated track list
+    let updated_playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    let track_count = updated_playlist.track_ids.len();
+    Ok(Json(PlaylistResponse::from_playlist(
+        &updated_playlist,
+        track_count,
+    )))
+}
+
+/// Remove tracks from a static playlist.
+#[utoipa::path(
+    delete,
+    path = "/api/playlists/{id}/tracks",
+    tag = "Playlists",
+    params(
+        ("id" = String, Path, description = "Playlist UUID", example = "770e8400-e29b-41d4-a716-446655440002")
+    ),
+    request_body = PlaylistTracksRequest,
+    responses(
+        (status = 200, description = "Tracks removed", body = PlaylistResponse),
+        (status = 400, description = "Invalid request or smart playlist", body = ErrorResponse),
+        (status = 404, description = "Playlist not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
+pub async fn remove_playlist_tracks(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<PlaylistTracksRequest>,
+) -> Result<Json<PlaylistResponse>, ApiError> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|_| ApiError::BadRequest(format!("Invalid playlist ID: {id}")))?;
+    let playlist_id = PlaylistId(uuid);
+
+    let playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    if playlist.is_smart() {
+        return Err(ApiError::BadRequest(
+            "Cannot remove tracks from smart playlist".to_string(),
+        ));
+    }
+
+    for track_id_str in &req.track_ids {
+        let track_uuid = Uuid::parse_str(track_id_str)
+            .map_err(|_| ApiError::BadRequest(format!("Invalid track ID: {track_id_str}")))?;
+        let track_id = TrackId(track_uuid);
+
+        state
+            .db
+            .remove_track_from_playlist(&playlist_id, &track_id)
+            .await?;
+    }
+
+    // Reload playlist to get updated track list
+    let updated_playlist = state
+        .db
+        .get_playlist(&playlist_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound(format!("Playlist not found: {id}")))?;
+
+    let track_count = updated_playlist.track_ids.len();
+    Ok(Json(PlaylistResponse::from_playlist(
+        &updated_playlist,
+        track_count,
+    )))
+}
+
+/// Parse a sort string into a playlist sort order.
+fn parse_sort(s: &str) -> PlaylistSort {
+    match s.to_lowercase().as_str() {
+        "album" => PlaylistSort::Album,
+        "title" => PlaylistSort::Title,
+        "added_desc" | "addeddesc" => PlaylistSort::AddedDesc,
+        "added_asc" | "addedasc" => PlaylistSort::AddedAsc,
+        "year_desc" | "yeardesc" => PlaylistSort::YearDesc,
+        "year_asc" | "yearasc" => PlaylistSort::YearAsc,
+        "random" => PlaylistSort::Random,
+        _ => PlaylistSort::Artist,
+    }
 }
 
 #[cfg(test)]

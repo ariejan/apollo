@@ -14,6 +14,14 @@
 //! - `GET /api/albums` - List all albums with pagination
 //! - `GET /api/albums/:id` - Get a single album by ID
 //! - `GET /api/albums/:id/tracks` - Get all tracks in an album
+//! - `GET /api/playlists` - List all playlists
+//! - `GET /api/playlists/:id` - Get a single playlist by ID
+//! - `GET /api/playlists/:id/tracks` - Get all tracks in a playlist
+//! - `POST /api/playlists` - Create a new playlist
+//! - `PATCH /api/playlists/:id` - Update a playlist
+//! - `DELETE /api/playlists/:id` - Delete a playlist
+//! - `POST /api/playlists/:id/tracks` - Add tracks to a playlist
+//! - `DELETE /api/playlists/:id/tracks` - Remove tracks from a playlist
 //! - `GET /api/search` - Search tracks by query
 //! - `GET /api/stats` - Get library statistics
 //! - `GET /swagger-ui` - Interactive API documentation
@@ -24,7 +32,9 @@ mod state;
 
 pub use error::ApiError;
 pub use handlers::{
-    ErrorResponse, HealthResponse, PaginatedAlbumsResponse, PaginatedTracksResponse, StatsResponse,
+    CreatePlaylistRequest, ErrorResponse, HealthResponse, PaginatedAlbumsResponse,
+    PaginatedTracksResponse, PlaylistResponse, PlaylistTracksRequest, StatsResponse,
+    UpdatePlaylistRequest,
 };
 pub use state::AppState;
 
@@ -52,6 +62,7 @@ use utoipa_swagger_ui::SwaggerUi;
     tags(
         (name = "Tracks", description = "Track management endpoints"),
         (name = "Albums", description = "Album management endpoints"),
+        (name = "Playlists", description = "Playlist management endpoints"),
         (name = "Search", description = "Search endpoints"),
         (name = "Library", description = "Library statistics"),
         (name = "System", description = "System health endpoints")
@@ -64,7 +75,15 @@ use utoipa_swagger_ui::SwaggerUi;
         handlers::list_albums,
         handlers::get_album,
         handlers::get_album_tracks,
-        handlers::search_tracks
+        handlers::search_tracks,
+        handlers::list_playlists,
+        handlers::get_playlist,
+        handlers::get_playlist_tracks,
+        handlers::create_playlist,
+        handlers::update_playlist,
+        handlers::delete_playlist,
+        handlers::add_playlist_tracks,
+        handlers::remove_playlist_tracks
     ),
     components(
         schemas(
@@ -78,7 +97,11 @@ use utoipa_swagger_ui::SwaggerUi;
             StatsResponse,
             ErrorResponse,
             PaginatedTracksResponse,
-            PaginatedAlbumsResponse
+            PaginatedAlbumsResponse,
+            PlaylistResponse,
+            CreatePlaylistRequest,
+            UpdatePlaylistRequest,
+            PlaylistTracksRequest
         )
     )
 )]
@@ -107,6 +130,23 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/albums", get(handlers::list_albums))
         .route("/api/albums/:id", get(handlers::get_album))
         .route("/api/albums/:id/tracks", get(handlers::get_album_tracks))
+        // Playlist endpoints
+        .route(
+            "/api/playlists",
+            get(handlers::list_playlists).post(handlers::create_playlist),
+        )
+        .route(
+            "/api/playlists/:id",
+            get(handlers::get_playlist)
+                .patch(handlers::update_playlist)
+                .delete(handlers::delete_playlist),
+        )
+        .route(
+            "/api/playlists/:id/tracks",
+            get(handlers::get_playlist_tracks)
+                .post(handlers::add_playlist_tracks)
+                .delete(handlers::remove_playlist_tracks),
+        )
         // Search endpoint
         .route("/api/search", get(handlers::search_tracks))
         // Stats endpoint
