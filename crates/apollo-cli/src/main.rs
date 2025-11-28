@@ -85,6 +85,9 @@ enum Commands {
         /// Port to listen on (overrides config)
         #[arg(short, long)]
         port: Option<u16>,
+        /// Path to directory containing static web UI files
+        #[arg(short, long)]
+        static_dir: Option<PathBuf>,
     },
     /// Show library statistics
     Stats,
@@ -354,11 +357,15 @@ async fn main() -> Result<()> {
             let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_stats(&lib_path).await
         }
-        Commands::Web { host, port } => {
+        Commands::Web {
+            host,
+            port,
+            static_dir,
+        } => {
             let host = host.unwrap_or_else(|| config.web.host.clone());
             let port = port.unwrap_or(config.web.port);
             let lib_path = get_library_path(cli.library.as_deref(), &config);
-            cmd_web(&lib_path, &host, port).await
+            cmd_web(&lib_path, &host, port, static_dir.as_deref()).await
         }
         Commands::Config { action } => cmd_config(action, cli.config.as_deref()),
         Commands::Duplicates {
@@ -997,7 +1004,7 @@ async fn cmd_organize(
 }
 
 /// Start the web server.
-async fn cmd_web(lib_path: &Path, host: &str, port: u16) -> Result<()> {
+async fn cmd_web(lib_path: &Path, host: &str, port: u16, static_dir: Option<&Path>) -> Result<()> {
     // Check if library exists
     if !lib_path.exists() {
         eprintln!("Library not found at: {}", lib_path.display());
@@ -1012,10 +1019,13 @@ async fn cmd_web(lib_path: &Path, host: &str, port: u16) -> Result<()> {
         .context("Failed to open library database")?;
 
     let state = std::sync::Arc::new(apollo_web::AppState::new(db));
-    let app = apollo_web::create_router(state);
+    let app = apollo_web::create_router_with_static_files(state, static_dir);
 
     let addr = format!("{host}:{port}");
     println!("Starting Apollo web server at http://{addr}");
+    if static_dir.is_some() {
+        println!("Web UI available at http://{addr}/");
+    }
     println!("Swagger UI available at http://{addr}/swagger-ui");
     println!();
     println!("Press Ctrl+C to stop");

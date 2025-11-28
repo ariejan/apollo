@@ -40,8 +40,10 @@ pub use state::AppState;
 
 use apollo_core::metadata::{Album, AlbumId, Artist, AudioFormat, Track, TrackId};
 use axum::{Router, routing::get};
+use std::path::Path;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -117,12 +119,29 @@ pub struct ApiDoc;
 ///
 /// An Axum router configured with all API endpoints
 pub fn create_router(state: Arc<AppState>) -> Router {
+    create_router_with_static_files(state, None)
+}
+
+/// Create the API router with optional static file serving.
+///
+/// # Arguments
+///
+/// * `state` - The shared application state containing the database connection
+/// * `static_files_path` - Optional path to directory containing static files (index.html, etc.)
+///
+/// # Returns
+///
+/// An Axum router configured with all API endpoints and optional static file serving
+pub fn create_router_with_static_files(
+    state: Arc<AppState>,
+    static_files_path: Option<&Path>,
+) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
-    Router::new()
+    let mut router = Router::new()
         // Track endpoints
         .route("/api/tracks", get(handlers::list_tracks))
         .route("/api/tracks/:id", get(handlers::get_track))
@@ -156,10 +175,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // OpenAPI documentation
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         // Add shared state
-        .with_state(state)
-        // Add middleware
-        .layer(cors)
-        .layer(TraceLayer::new_for_http())
+        .with_state(state);
+
+    // Serve static files if path is provided (for embedded web UI)
+    if let Some(path) = static_files_path {
+        let index_file = path.join("index.html");
+        router = router
+            .fallback_service(ServeDir::new(path).not_found_service(ServeFile::new(index_file)));
+    }
+
+    // Add middleware
+    router.layer(cors).layer(TraceLayer::new_for_http())
 }
 
 #[cfg(test)]
