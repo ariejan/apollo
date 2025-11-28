@@ -351,7 +351,7 @@ mod tests {
             track_count in 0u32..1000u32,
             disc_count in 1u32..20u32,
         ) {
-            let mut album = Album::new(title.clone(), artist.clone());
+            let mut album = Album::new(title, artist);
             album.year = year;
             album.track_count = track_count;
             album.disc_count = disc_count;
@@ -373,9 +373,9 @@ mod tests {
             sort_name in proptest::option::of(non_empty_string()),
             musicbrainz_id in proptest::option::of("[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"),
         ) {
-            let mut artist = Artist::new(name.clone());
-            artist.sort_name = sort_name.clone();
-            artist.musicbrainz_id = musicbrainz_id.clone();
+            let mut artist = Artist::new(name);
+            artist.sort_name = sort_name;
+            artist.musicbrainz_id = musicbrainz_id;
 
             let json = serde_json::to_string(&artist).expect("serialization should succeed");
             let deserialized: Artist = serde_json::from_str(&json).expect("deserialization should succeed");
