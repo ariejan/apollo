@@ -33,6 +33,56 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Path Templates)
+
+### Completed
+- Implemented path template system in apollo-core:
+  - Template syntax with variables ($artist, $album, $title, $track, $year, $genre, $ext)
+  - Braced variables (${artist}) for disambiguation
+  - Functions: %upper{}, %lower{}, %title{}, %if{}, %first{}, %replace{}, %sanitize{}, %asciify{}, %padnum{}, %left{}, %right{}
+  - Nested function support
+  - Escape characters with backslash
+  - TemplateContext::from_track() for easy track-to-context conversion
+  - 25+ unit tests including property-based tests
+- Added file operations module to apollo-audio:
+  - organize_file() - Move/copy a single file using template
+  - preview_destination() - Preview destination path without acting
+  - OrganizeOptions with move/copy, overwrite, create_dirs
+  - 5 integration tests using tempfile
+- Added `apollo organize` CLI command:
+  - Organize library files into structured directories
+  - --template for custom path template (default from config)
+  - --move-files to move instead of copy
+  - --force to overwrite existing files
+  - --dry-run to preview changes
+  - --track-ids to organize specific tracks
+  - --limit to restrict number of tracks
+  - Progress bar with eta
+- All 143 tests passing across workspace
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use $ prefix for variables (consistent with existing config)
+- Use % prefix for functions (like beets)
+- Support nested functions
+- Include sanitize_path_component() for filesystem-safe filenames
+- Include asciify() for ASCII transliteration
+
+### Decisions Requested
+- None
+
+### Notes
+- Template system is powerful but approachable
+- Dry-run mode helps users preview organization changes
+- File organization updates file paths but doesn't update database (could be future enhancement)
+
+---
+
 ## Session: 2025-11-28 (Duplicate Detection)
 
 ### Completed

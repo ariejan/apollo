@@ -65,9 +65,9 @@
 - [DONE] Discogs integration (2025-11-28)
 - [DONE] Album art fetching (2025-11-28)
 - [DONE] Duplicate detection (2025-11-28)
+- [DONE] Path templates for file organization (2025-11-28)
 - [TODO] Smart playlists
 - [TODO] Web UI frontend
-- [IN PROGRESS] Path templates for file organization
 
 ---
 
@@ -100,6 +100,7 @@
 - [2025-11-28] Discogs API integration with search, release lookup, and barcode search
 - [2025-11-28] Cover Art Archive integration with image fetching, saving, and Discogs support
 - [2025-11-28] Duplicate detection (exact hash and similar metadata) with CLI command
+- [2025-11-28] Path templates for file organization with CLI organize command
 
 ---
 
