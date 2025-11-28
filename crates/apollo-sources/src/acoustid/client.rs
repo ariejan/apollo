@@ -127,7 +127,11 @@ impl AcoustIdClient {
             urlencoding::encode(&meta_str)
         );
 
-        debug!("AcoustID lookup: duration={}s, fingerprint_len={}", duration, fingerprint.len());
+        debug!(
+            "AcoustID lookup: duration={}s, fingerprint_len={}",
+            duration,
+            fingerprint.len()
+        );
 
         let response = self.client.get(&url).send().await?;
         let status = response.status();

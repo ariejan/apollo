@@ -33,6 +33,50 @@ This file tracks what was accomplished in each Claude Code session.
 
 ## Sessions
 
+## Session: 2025-11-28 (Configuration Support)
+
+### Completed
+- Added configuration file support to Apollo:
+  - Created `apollo-core/src/config.rs` with comprehensive Config struct
+  - TOML configuration format with sensible defaults
+  - Configuration sections for: library, import, paths, musicbrainz, acoustid, web, plugins
+  - `Config::load()` and `Config::save()` for file operations
+  - Tilde expansion (`~`) for paths
+- Integrated configuration with CLI:
+  - `apollo config show` - display current configuration as TOML
+  - `apollo config init` - create default configuration file
+  - `apollo config path` - show configuration file location
+  - `apollo config get <key>` - get a configuration value
+  - `apollo config set <key> <value>` - set a configuration value
+  - Global `-c/--config` flag to specify custom config file
+  - CLI now reads from config for library path, web server settings
+- Implemented working `apollo web` command:
+  - Starts the web server using settings from config
+  - Supports `--host` and `--port` overrides
+  - Properly wraps database in AppState
+
+### In Progress
+- None
+
+### Blockers Encountered
+- None
+
+### Decisions Made
+- Use TOML format for configuration (standard for Rust projects)
+- Store config at `~/.config/apollo/config.toml` (XDG standard)
+- Store library at `~/.apollo/apollo.db` by default
+- Add `Eq` derive to all config structs (clippy requirement)
+
+### Decisions Requested
+- None
+
+### Notes
+- Configuration file is optional - defaults work without it
+- All tests passing (102 tests across workspace)
+- Configuration is now foundation for future features
+
+---
+
 ## Session: 2025-11-28 (Response Caching & Fingerprint)
 
 ### Completed

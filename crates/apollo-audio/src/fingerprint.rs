@@ -104,10 +104,12 @@ pub fn generate_fingerprint(path: &Path) -> Result<FingerprintResult, AudioError
     let config = Configuration::preset_test2();
     let mut fingerprinter = Fingerprinter::new(&config);
     #[allow(clippy::cast_possible_truncation)]
-    fingerprinter.start(sample_rate, channels as u32).map_err(|e| {
-        warn!("Failed to start fingerprinter: {:?}", e);
-        AudioError::UnsupportedFormat(path.to_path_buf())
-    })?;
+    fingerprinter
+        .start(sample_rate, channels as u32)
+        .map_err(|e| {
+            warn!("Failed to start fingerprinter: {:?}", e);
+            AudioError::UnsupportedFormat(path.to_path_buf())
+        })?;
 
     let mut total_samples = 0u64;
     let mut sample_buf = None;
@@ -177,7 +179,11 @@ pub fn generate_fingerprint(path: &Path) -> Result<FingerprintResult, AudioError
     #[allow(clippy::cast_possible_truncation)]
     let duration = (total_samples / (u64::from(sample_rate) * (channels as u64))) as u32;
 
-    debug!("Generated fingerprint: {} chars, {}s", fingerprint.len(), duration);
+    debug!(
+        "Generated fingerprint: {} chars, {}s",
+        fingerprint.len(),
+        duration
+    );
 
     Ok(FingerprintResult {
         fingerprint,

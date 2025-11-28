@@ -61,12 +61,12 @@
 - [DONE] Example plugins (clean_tags, skip_hidden) (2025-11-28)
 
 ### Priority 9
+- [DONE] Configuration file support (2025-11-28)
 - [TODO] Discogs integration
 - [TODO] Album art fetching
 - [TODO] Duplicate detection
 - [TODO] Smart playlists
 - [TODO] Web UI frontend
-- [TODO] Configuration file support
 - [TODO] Path templates for file organization
 
 ---
@@ -96,6 +96,7 @@
 - [2025-11-28] Add OpenAPI documentation with Swagger UI
 - [2025-11-28] Add MusicBrainz response caching with TTL and disk persistence
 - [2025-11-28] Add audio fingerprinting and AcoustID integration
+- [2025-11-28] Configuration file support with TOML, CLI config commands
 
 ---
 

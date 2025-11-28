@@ -7,6 +7,7 @@
 
 use anyhow::{Context, Result};
 use apollo_audio::{ScanOptions, ScanProgress, scan_directory};
+use apollo_core::Config;
 use apollo_db::SqliteLibrary;
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -14,17 +15,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-/// Default library database filename.
-const DEFAULT_DB_NAME: &str = "apollo.db";
-
-/// Default library location (relative to home directory).
-const DEFAULT_LIB_DIR: &str = ".apollo";
-
 #[derive(Parser)]
 #[command(name = "apollo")]
 #[command(author, version, about = "A modern music library manager", long_about = None)]
 struct Cli {
-    /// Path to the library database
+    /// Path to the configuration file
+    #[arg(short, long, global = true)]
+    config: Option<PathBuf>,
+
+    /// Path to the library database (overrides config)
     #[arg(short, long, global = true)]
     library: Option<PathBuf>,
 
@@ -78,15 +77,46 @@ enum Commands {
     },
     /// Start the web server
     Web {
-        /// Host to bind to
-        #[arg(short, long, default_value = "127.0.0.1")]
-        host: String,
-        /// Port to listen on
-        #[arg(short, long, default_value = "8337")]
-        port: u16,
+        /// Host to bind to (overrides config)
+        #[arg(short = 'H', long)]
+        host: Option<String>,
+        /// Port to listen on (overrides config)
+        #[arg(short, long)]
+        port: Option<u16>,
     },
     /// Show library statistics
     Stats,
+    /// Manage configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Show current configuration
+    Show,
+    /// Initialize a new configuration file
+    Init {
+        /// Force overwrite existing config
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Show configuration file path
+    Path,
+    /// Edit a configuration value
+    Set {
+        /// Configuration key (e.g., `web.port`, `acoustid.api_key`)
+        key: String,
+        /// Value to set
+        value: String,
+    },
+    /// Get a configuration value
+    Get {
+        /// Configuration key (e.g., `web.port`, `acoustid.api_key`)
+        key: String,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -95,15 +125,17 @@ enum ListType {
     Albums,
 }
 
-/// Get the default library path.
-fn default_library_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("Could not determine home directory")?;
-    Ok(home.join(DEFAULT_LIB_DIR).join(DEFAULT_DB_NAME))
+/// Load configuration from file or use defaults.
+fn load_config(config_path: Option<&Path>) -> Result<Config> {
+    config_path.map_or_else(
+        || Config::load().context("Failed to load configuration"),
+        |path| Config::load_from(path).context("Failed to load configuration file"),
+    )
 }
 
-/// Get the library path from CLI args or default.
-fn get_library_path(cli_path: Option<&Path>) -> Result<PathBuf> {
-    cli_path.map_or_else(default_library_path, |p| Ok(p.to_path_buf()))
+/// Get the library path from CLI args, config, or default.
+fn get_library_path(cli_path: Option<&Path>, config: &Config) -> PathBuf {
+    cli_path.map_or_else(|| config.library_path(), Path::to_path_buf)
 }
 
 /// Ensure the parent directory for a path exists.
@@ -138,14 +170,17 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Load configuration
+    let config = load_config(cli.config.as_deref())?;
+
     match cli.command {
-        Commands::Init { path } => cmd_init(path).await,
+        Commands::Init { path } => cmd_init(path, &config).await,
         Commands::Import {
             path,
             depth,
             follow_symlinks,
         } => {
-            let lib_path = get_library_path(cli.library.as_deref())?;
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_import(&lib_path, &path, depth, follow_symlinks).await
         }
         Commands::List {
@@ -153,28 +188,30 @@ async fn main() -> Result<()> {
             limit,
             offset,
         } => {
-            let lib_path = get_library_path(cli.library.as_deref())?;
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_list(&lib_path, type_, limit, offset).await
         }
         Commands::Query { query, limit } => {
-            let lib_path = get_library_path(cli.library.as_deref())?;
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_query(&lib_path, &query, limit).await
         }
         Commands::Stats => {
-            let lib_path = get_library_path(cli.library.as_deref())?;
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
             cmd_stats(&lib_path).await
         }
         Commands::Web { host, port } => {
-            println!("Starting web server at {host}:{port}");
-            println!("Web server not yet implemented");
-            Ok(())
+            let host = host.unwrap_or_else(|| config.web.host.clone());
+            let port = port.unwrap_or(config.web.port);
+            let lib_path = get_library_path(cli.library.as_deref(), &config);
+            cmd_web(&lib_path, &host, port).await
         }
+        Commands::Config { action } => cmd_config(action, cli.config.as_deref()),
     }
 }
 
 /// Initialize a new library.
-async fn cmd_init(path: Option<PathBuf>) -> Result<()> {
-    let lib_path = path.map_or_else(default_library_path, Ok)?;
+async fn cmd_init(path: Option<PathBuf>, config: &Config) -> Result<()> {
+    let lib_path = path.unwrap_or_else(|| config.library_path());
 
     // Check if library already exists
     if lib_path.exists() {
@@ -511,4 +548,197 @@ async fn cmd_stats(lib_path: &Path) -> Result<()> {
     println!("Albums: {album_count}");
 
     Ok(())
+}
+
+/// Start the web server.
+async fn cmd_web(lib_path: &Path, host: &str, port: u16) -> Result<()> {
+    // Check if library exists
+    if !lib_path.exists() {
+        eprintln!("Library not found at: {}", lib_path.display());
+        eprintln!("Run 'apollo init' first to create a library");
+        std::process::exit(1);
+    }
+
+    // Connect to database
+    let db_url = format!("sqlite:{}", lib_path.display());
+    let db = SqliteLibrary::new(&db_url)
+        .await
+        .context("Failed to open library database")?;
+
+    let state = std::sync::Arc::new(apollo_web::AppState::new(db));
+    let app = apollo_web::create_router(state);
+
+    let addr = format!("{host}:{port}");
+    println!("Starting Apollo web server at http://{addr}");
+    println!("Swagger UI available at http://{addr}/swagger-ui");
+    println!();
+    println!("Press Ctrl+C to stop");
+
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .context("Failed to bind to address")?;
+
+    axum::serve(listener, app)
+        .await
+        .context("Web server error")?;
+
+    Ok(())
+}
+
+/// Handle configuration commands.
+fn cmd_config(action: ConfigAction, config_path: Option<&Path>) -> Result<()> {
+    match action {
+        ConfigAction::Show => {
+            let config = load_config(config_path)?;
+            let toml = config.to_toml().context("Failed to serialize config")?;
+            println!("{toml}");
+            Ok(())
+        }
+        ConfigAction::Init { force } => {
+            let path = config_path
+                .map(PathBuf::from)
+                .or_else(Config::default_path)
+                .context("Could not determine config path")?;
+
+            if path.exists() && !force {
+                eprintln!("Configuration file already exists at: {}", path.display());
+                eprintln!("Use --force to overwrite");
+                std::process::exit(1);
+            }
+
+            let config = Config::default();
+            config.save_to(&path).context("Failed to save config")?;
+
+            println!("Created configuration file at: {}", path.display());
+            println!();
+            println!("Edit this file to customize Apollo settings.");
+            println!("Run 'apollo config show' to view current settings.");
+
+            Ok(())
+        }
+        ConfigAction::Path => {
+            let path = config_path
+                .map(PathBuf::from)
+                .or_else(Config::default_path)
+                .context("Could not determine config path")?;
+
+            println!("{}", path.display());
+
+            if path.exists() {
+                println!("(exists)");
+            } else {
+                println!("(not created yet - run 'apollo config init')");
+            }
+
+            Ok(())
+        }
+        ConfigAction::Get { key } => {
+            let config = load_config(config_path)?;
+            let value = get_config_value(&config, &key)?;
+            println!("{value}");
+            Ok(())
+        }
+        ConfigAction::Set { key, value } => {
+            let mut config = load_config(config_path)?;
+            set_config_value(&mut config, &key, &value)?;
+
+            let path = config_path
+                .map(PathBuf::from)
+                .or_else(Config::default_path)
+                .context("Could not determine config path")?;
+
+            config.save_to(&path).context("Failed to save config")?;
+            println!("Set {key} = {value}");
+
+            Ok(())
+        }
+    }
+}
+
+/// Get a configuration value by key path.
+fn get_config_value(config: &Config, key: &str) -> Result<String> {
+    let parts: Vec<&str> = key.split('.').collect();
+
+    match parts.as_slice() {
+        ["library", "path"] => Ok(config.library.path.display().to_string()),
+        ["import", "move_files"] => Ok(config.import.move_files.to_string()),
+        ["import", "write_tags"] => Ok(config.import.write_tags.to_string()),
+        ["import", "copy_album_art"] => Ok(config.import.copy_album_art.to_string()),
+        ["import", "auto_create_albums"] => Ok(config.import.auto_create_albums.to_string()),
+        ["import", "compute_hashes"] => Ok(config.import.compute_hashes.to_string()),
+        ["paths", "music_directory"] => Ok(config
+            .paths
+            .music_directory
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()),
+        ["paths", "path_template"] => Ok(config.paths.path_template.clone()),
+        ["musicbrainz", "enabled"] => Ok(config.musicbrainz.enabled.to_string()),
+        ["musicbrainz", "auto_tag"] => Ok(config.musicbrainz.auto_tag.to_string()),
+        ["musicbrainz", "app_name"] => Ok(config.musicbrainz.app_name.clone()),
+        ["musicbrainz", "app_version"] => Ok(config.musicbrainz.app_version.clone()),
+        ["musicbrainz", "contact_email"] => Ok(config.musicbrainz.contact_email.clone()),
+        ["acoustid", "enabled"] => Ok(config.acoustid.enabled.to_string()),
+        ["acoustid", "api_key"] => Ok(config.acoustid.api_key.clone()),
+        ["acoustid", "auto_lookup"] => Ok(config.acoustid.auto_lookup.to_string()),
+        ["web", "host"] => Ok(config.web.host.clone()),
+        ["web", "port"] => Ok(config.web.port.to_string()),
+        ["web", "swagger_ui"] => Ok(config.web.swagger_ui.to_string()),
+        ["plugins", "directory"] => Ok(config.plugins.directory.display().to_string()),
+        ["plugins", "enabled"] => Ok(config.plugins.enabled.join(", ")),
+        _ => anyhow::bail!("Unknown configuration key: {key}"),
+    }
+}
+
+/// Set a configuration value by key path.
+fn set_config_value(config: &mut Config, key: &str, value: &str) -> Result<()> {
+    let parts: Vec<&str> = key.split('.').collect();
+
+    match parts.as_slice() {
+        ["library", "path"] => config.library.path = PathBuf::from(value),
+        ["import", "move_files"] => config.import.move_files = parse_bool(value)?,
+        ["import", "write_tags"] => config.import.write_tags = parse_bool(value)?,
+        ["import", "copy_album_art"] => config.import.copy_album_art = parse_bool(value)?,
+        ["import", "auto_create_albums"] => config.import.auto_create_albums = parse_bool(value)?,
+        ["import", "compute_hashes"] => config.import.compute_hashes = parse_bool(value)?,
+        ["paths", "music_directory"] => {
+            config.paths.music_directory = if value.is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(value))
+            };
+        }
+        ["paths", "path_template"] => config.paths.path_template = value.to_string(),
+        ["musicbrainz", "enabled"] => config.musicbrainz.enabled = parse_bool(value)?,
+        ["musicbrainz", "auto_tag"] => config.musicbrainz.auto_tag = parse_bool(value)?,
+        ["musicbrainz", "app_name"] => config.musicbrainz.app_name = value.to_string(),
+        ["musicbrainz", "app_version"] => config.musicbrainz.app_version = value.to_string(),
+        ["musicbrainz", "contact_email"] => config.musicbrainz.contact_email = value.to_string(),
+        ["acoustid", "enabled"] => config.acoustid.enabled = parse_bool(value)?,
+        ["acoustid", "api_key"] => config.acoustid.api_key = value.to_string(),
+        ["acoustid", "auto_lookup"] => config.acoustid.auto_lookup = parse_bool(value)?,
+        ["web", "host"] => config.web.host = value.to_string(),
+        ["web", "port"] => config.web.port = value.parse().context("Invalid port number")?,
+        ["web", "swagger_ui"] => config.web.swagger_ui = parse_bool(value)?,
+        ["plugins", "directory"] => config.plugins.directory = PathBuf::from(value),
+        ["plugins", "enabled"] => {
+            config.plugins.enabled = value
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
+        _ => anyhow::bail!("Unknown configuration key: {key}"),
+    }
+
+    Ok(())
+}
+
+/// Parse a boolean value from string.
+fn parse_bool(value: &str) -> Result<bool> {
+    match value.to_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => anyhow::bail!("Invalid boolean value: {value} (use true/false)"),
+    }
 }

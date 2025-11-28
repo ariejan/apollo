@@ -20,6 +20,13 @@ pub enum Error {
     /// Validation error for metadata.
     #[error("validation error: {0}")]
     Validation(String),
+
+    /// Configuration error.
+    #[error("configuration error: {message}")]
+    Config {
+        /// Error message describing what went wrong.
+        message: String,
+    },
 }
 
 /// Result type alias using the core Error type.
